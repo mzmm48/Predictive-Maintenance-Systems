@@ -1,11 +1,11 @@
-import pandas as pd
-from sklearn.preprocessing import LabelEncoder
+import joblib
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegression,LogisticRegressionCV,SGDClassifier
 from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier,AdaBoostClassifier,BaggingClassifier
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.svm import SVC
 from sklearn.neighbors import KNeighborsClassifier
+from imblearn.over_sampling import SMOTE
 import pickle
 import os
 
@@ -14,15 +14,13 @@ Hier werden die Verschiedenen Modelle initialisiert und Trainiert um später auf
 einkommenden Daten angewendet zu werden
 """
 
-df = pd.read_csv('../data/ai4i2020.csv')
+df = joblib.load('../data/df_preprocessing.joblib')
 
-data = df
-data.drop(columns=['UDI', 'Product ID', 'TWF', 'HDF', 'PWF', 'OSF', 'RNF'],inplace=True)
+X = df
+y = df.pop("Machine failure")
 
-data['Type'] = LabelEncoder().fit_transform(df['Type'])
-
-X = data
-y = data.pop("Machine failure")
+smote = SMOTE(random_state=42)
+X_resampled, y_resampled = smote.fit_resample(X, y)
 
 """
 Wenn wir die Daten auf Trainings und Testdaten splitten müssten, aber da wir sowieso neue Daten noch generieren sollen, 
@@ -36,22 +34,22 @@ models = {
     'Logistic Regression': LogisticRegression(max_iter=500, solver='lbfgs', random_state=0),
     'Logistic Regression CV': LogisticRegressionCV(cv=5, max_iter=500, solver='lbfgs', random_state=0),
     'SGD': SGDClassifier(max_iter=1000, tol=1e-3, random_state=0),
-    'Random Forest': RandomForestClassifier(n_estimators=15, max_depth=2, random_state=0),
+    'Random Forest': RandomForestClassifier(n_estimators=15, max_depth=6, class_weight='balanced', random_state=0),
     'Gradient Boosting': GradientBoostingClassifier(n_estimators=100, learning_rate=0.1, max_depth=3, random_state=0),
     'AdaBoost': AdaBoostClassifier(n_estimators=50, learning_rate=1.0, random_state=0),
     'Bagging': BaggingClassifier(n_estimators=10, random_state=0),
     'Decision Tree': DecisionTreeClassifier(max_depth=4, random_state=0),
-    'Support Vector Machine': SVC(kernel='linear', probability=True, random_state=0),
+    #'Support Vector Machine': SVC(kernel='linear', probability=True, random_state=0), #TODO lädt nicht
     'K-Nearest Neighbors': KNeighborsClassifier(n_neighbors=5)
 }
-def create_models(X, y):
+def create_models(X_resampled, y_resampled):
     os.makedirs(path, exist_ok=True)
-    feature_names = X.columns.tolist()
+    feature_names = X_resampled.columns.tolist()
     for name, model in models.items():
-        model.fit(X, y)
+        model.fit(X_resampled, y_resampled)
         filename = os.path.join(path, f"{name.replace(" ", "_")}" + '.pkl')
         with open(filename, "wb") as f:
             pickle.dump({'model': model, 'features': feature_names}, f)
         print(f"✅ {name} gespeichert unter {filename}")
 
-create_models(X, y)
+create_models(X_resampled, y_resampled)
