@@ -24,6 +24,7 @@ smote = SMOTE(random_state=42)
 X_resampled, y_resampled = smote.fit_resample(X, y)
 
 X_train, X_test, Y_train, Y_test=train_test_split(X_resampled,y_resampled,test_size=0.3, random_state=0)
+
 """
 Wenn wir die Daten auf Trainings und Testdaten splitten müssten, aber da wir sowieso neue Daten noch generieren sollen, 
 können wir diese einfach komplett für das Trainieren der Modelle verwenden.

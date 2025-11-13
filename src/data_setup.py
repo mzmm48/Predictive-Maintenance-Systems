@@ -1,5 +1,5 @@
-#TODO ersetzt mit preprocessing -> data_prepocessing
-#TODO muss auch zu beginn aktiviert werden
+# TODO ersetzt mit preprocessing -> data_prepocessing
+# TODO muss auch zu beginn aktiviert werden
 import pandas as pd
 import joblib
 from pathlib import Path
@@ -13,3 +13,4 @@ df_preprocessing = preprocess_raw_df(df)
 
 joblib.dump(df_preprocessing, DATA_DIR / "df_preprocessing.joblib")
 joblib.dump(df, DATA_DIR / "df_original.joblib")
+

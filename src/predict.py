@@ -1,4 +1,4 @@
-#TODO wird von Test/Main aufgerufen
+# TODO wird von Test/Main aufgerufen
 import pickle
 import numpy as np
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay, roc_auc_score, RocCurveDisplay, \
@@ -27,7 +27,7 @@ def do_prediction(x_test, y_test, model_name:str = "Random_Forest"):
 
 
 # TODO auslagern in seperate Funktion
-#def visualize()
+# TODO def visualize()
     # Confusion Matrix
     cm = confusion_matrix(y_test, y_pred)
     disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=class_names)
@@ -48,3 +48,4 @@ def do_prediction(x_test, y_test, model_name:str = "Random_Forest"):
 
     print(acc)
     print(model)
+

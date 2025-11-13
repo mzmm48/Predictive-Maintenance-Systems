@@ -10,8 +10,10 @@ DATA_DIR = Path("../data")
 
 ORIGINAL_DF_PATH = DATA_DIR / "df_original.joblib"
 
+
 def load_original_df():
     return joblib.load(ORIGINAL_DF_PATH)
+
 
 def preprocess_raw_df(df_raw: pd.DataFrame) -> pd.DataFrame:
     df_pre = df_raw.copy()
@@ -29,6 +31,7 @@ def preprocess_raw_df(df_raw: pd.DataFrame) -> pd.DataFrame:
 
     return df_pre
 
+
 def preprocess_new_data(df_new_raw: pd.DataFrame) -> pd.DataFrame:
     df_pre = df_new_raw.copy()
 
@@ -41,7 +44,6 @@ def preprocess_new_data(df_new_raw: pd.DataFrame) -> pd.DataFrame:
         4
     )
 
-    # LabelEncoder mit den gleichen Klassen wie im Training
     df_original = load_original_df()
     le = LabelEncoder()
     le.fit(df_original['Type'])
@@ -49,3 +51,4 @@ def preprocess_new_data(df_new_raw: pd.DataFrame) -> pd.DataFrame:
     df_pre['Type'] = le.transform(df_pre['Type'])
 
     return df_pre
+

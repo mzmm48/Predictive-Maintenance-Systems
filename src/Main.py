@@ -5,4 +5,4 @@ from predict import do_prediction
 x_test = joblib.load('../data/X_test.joblib')
 y_test = joblib.load('../data/Y_test.joblib')
 
-do_prediction(x_test, y_test)
+do_prediction(x_test, y_test, model_name='K-Nearest_Neighbors')
