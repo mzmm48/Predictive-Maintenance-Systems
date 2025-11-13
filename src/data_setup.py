@@ -1,4 +1,5 @@
 #TODO ersetzt mit preprocessing -> data_prepocessing
+#TODO muss auch zu beginn aktiviert werden
 import pandas as pd
 import joblib
 from pathlib import Path

@@ -1,6 +1,5 @@
-#TODO 1. Modell, 2. Test_Split, 3. Predict, 4. Auswerten
+#TODO wird von Test/Main aufgerufen
 import pickle
-import joblib
 import numpy as np
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay, roc_auc_score, RocCurveDisplay, \
     PrecisionRecallDisplay, precision_recall_curve, accuracy_score, classification_report

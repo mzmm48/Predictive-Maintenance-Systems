@@ -1,3 +1,4 @@
+#TODO Hauptanwendung
 import joblib
 from predict import do_prediction
 

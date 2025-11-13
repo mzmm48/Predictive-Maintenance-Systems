@@ -1,4 +1,5 @@
 #TODO ersetzt mit data_setup -> data_prepocessing
+#TODO wird von data_setup aufgerufen
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import LabelEncoder
