@@ -1,9 +1,10 @@
+#TODO veraltet wird nicht mehr benutzt
 import pandas as pd
 import numpy as np
 from sklearn.preprocessing import LabelEncoder
 import joblib
 
-df = pd.read_csv('../data/ai4i2020.csv')
+df = pd.read_csv('../../data/ai4i2020.csv')
 
 df_preprocessing = df.copy()
 
@@ -13,5 +14,5 @@ df_preprocessing['Mechanical Power [W]'] = np.round((df_preprocessing['Torque [N
 
 df_preprocessing['Type'] = LabelEncoder().fit_transform(df['Type'])
 
-joblib.dump(df_preprocessing, '../data/df_preprocessing.joblib')
-joblib.dump(df, '../data/df_original.joblib')
+joblib.dump(df_preprocessing, '../../data/df_preprocessing.joblib')
+joblib.dump(df, '../../data/df_original.joblib')

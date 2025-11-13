@@ -22,6 +22,7 @@ y = df.pop("Machine failure")
 smote = SMOTE(random_state=42)
 X_resampled, y_resampled = smote.fit_resample(X, y)
 
+X_train, X_test, Y_train, Y_test=train_test_split(X_resampled,y_resampled,test_size=0.3, random_state=0)
 """
 Wenn wir die Daten auf Trainings und Testdaten splitten müssten, aber da wir sowieso neue Daten noch generieren sollen, 
 können wir diese einfach komplett für das Trainieren der Modelle verwenden.
@@ -42,14 +43,20 @@ models = {
     #'Support Vector Machine': SVC(kernel='linear', probability=True, random_state=0), #TODO lädt nicht
     'K-Nearest Neighbors': KNeighborsClassifier(n_neighbors=5)
 }
-def create_models(X_resampled, y_resampled):
+
+
+def create_models(X_train, Y_train):
     os.makedirs(path, exist_ok=True)
     feature_names = X_resampled.columns.tolist()
     for name, model in models.items():
-        model.fit(X_resampled, y_resampled)
+        model.fit(X_train, Y_train)
         filename = os.path.join(path, f"{name.replace(" ", "_")}" + '.pkl')
         with open(filename, "wb") as f:
             pickle.dump({'model': model, 'features': feature_names}, f)
         print(f"✅ {name} gespeichert unter {filename}")
+
+
+joblib.dump(X_test, '../data/X_test.joblib')
+joblib.dump(Y_test, '../data/Y_test.joblib')
 
 create_models(X_resampled, y_resampled)
