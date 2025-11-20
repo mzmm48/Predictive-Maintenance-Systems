@@ -20,14 +20,16 @@ def do_prediction(x_test, y_test, model_name:str = "Random_Forest"):
     y_prob = model.predict_proba(x_test)[:, 1]
 
     values, counts = np.unique(y_pred, return_counts=True)
-    print(values)
-    print(counts)
-
-    print(classification_report(y_test, y_pred))
+#    print(values)
+#    print(counts)
+    print(y_pred)
+    print(y_prob)
+#    print(classification_report(y_test, y_pred))
 
 
 # TODO auslagern in seperate Funktion
 # TODO def visualize()
+"""
     # Confusion Matrix
     cm = confusion_matrix(y_test, y_pred)
     disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=class_names)
@@ -48,4 +50,4 @@ def do_prediction(x_test, y_test, model_name:str = "Random_Forest"):
 
     print(acc)
     print(model)
-
+"""

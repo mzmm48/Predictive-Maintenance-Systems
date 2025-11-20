@@ -15,6 +15,7 @@ def load_original_df():
     return joblib.load(ORIGINAL_DF_PATH)
 
 
+#TODO Liest die Datei ein welche für das trainieren der Modelle verwendet wird
 def preprocess_raw_df(df_raw: pd.DataFrame) -> pd.DataFrame:
     df_pre = df_raw.copy()
 
@@ -32,6 +33,7 @@ def preprocess_raw_df(df_raw: pd.DataFrame) -> pd.DataFrame:
     return df_pre
 
 
+#TODO Liest die Daten, welches die Modelle Vorhersagen sollen
 def preprocess_new_data(df_new_raw: pd.DataFrame) -> pd.DataFrame:
     df_pre = df_new_raw.copy()
 
