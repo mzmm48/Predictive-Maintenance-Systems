@@ -6,7 +6,7 @@ from sklearn.preprocessing import LabelEncoder
 import joblib
 from pathlib import Path
 
-DATA_DIR = Path("../data")
+DATA_DIR = Path("../../data")
 
 ORIGINAL_DF_PATH = DATA_DIR / "df_original.joblib"
 

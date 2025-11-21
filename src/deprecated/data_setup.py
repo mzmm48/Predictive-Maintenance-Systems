@@ -3,9 +3,9 @@
 import pandas as pd
 import joblib
 from pathlib import Path
-from preprocessing import preprocess_raw_df
+from src.deprecated.preprocessing import preprocess_raw_df
 
-DATA_DIR = Path("../data")
+DATA_DIR = Path("../../data")
 
 df = pd.read_csv(DATA_DIR / "ai4i2020.csv")
 

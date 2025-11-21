@@ -15,7 +15,7 @@ Hier werden die Verschiedenen Modelle initialisiert und Trainiert um später auf
 einkommenden Daten angewendet zu werden
 """
 
-df = joblib.load('../data/df_preprocessing.joblib')
+df = joblib.load('../../data/df_preprocessing.joblib')
 
 X = df
 y = df.pop("Machine failure")
@@ -31,7 +31,7 @@ können wir diese einfach komplett für das Trainieren der Modelle verwenden.
 #X_train, X_test, Y_train, Y_test = train_test_split(X, y, test_size=0.3, random_state=0)
 """
 
-path = "../data/models"
+path = "../../data/models"
 
 models = {
     'Logistic Regression': LogisticRegression(max_iter=500, solver='lbfgs', random_state=0),
@@ -58,7 +58,7 @@ def create_models(X_train, Y_train):
         print(f"✅ {name} gespeichert unter {filename}")
 
 
-joblib.dump(X_test, '../data/X_test.joblib')
-joblib.dump(Y_test, '../data/Y_test.joblib')
+joblib.dump(X_test, '../../data/X_test.joblib')
+joblib.dump(Y_test, '../../data/Y_test.joblib')
 
 create_models(X_resampled, y_resampled)
