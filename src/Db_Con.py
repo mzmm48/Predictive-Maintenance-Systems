@@ -26,7 +26,7 @@ class TimescaleDB:
 
 #Beispiel
 #test = TimescaleDB("postgres://tsdbadmin:seleneares123@b0e1bmoiny.xe7d3cm2b8.tsdb.cloud.timescale.com:31840/tsdb?sslmode=require")
-#rows = test.query("SELECT * FROM set2")
+#rows = test.query("SELECT * FROM ai4i2020")
 #columns = [
 # "ts", "udi", "Product ID", "Type", "Air temperature [K]","Process temperature [K]", "Rotational speed [rpm]", 
 #"Torque [Nm]", "Tool wear [min]", "Machine failure", "twf", "hdf", "pwf", "osf", "rnf"]
