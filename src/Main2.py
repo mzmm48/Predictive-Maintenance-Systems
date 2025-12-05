@@ -20,7 +20,7 @@ x_test2 = x_test.reset_index(drop=True)
 y_test2 = y_test.reset_index(drop=True)
 
 
-def simulate_time_stream(x_test2, y_test2, delay_seconds=0.1, model_name: str = 'Random_Forest'):
+def simulate_time_stream(x_test2, y_test2, delay_seconds=0.01, model_name: str = 'Random_Forest'):
 
     for i in range(len(x_test2)):
         n = i
@@ -59,6 +59,6 @@ def evaluate_model(X_test, y_test, model_name="Random_Forest"):
     plt.show()
 
 
-evaluate_model(x_test, y_test, "Random_Forest")
-
-simulate_time_stream(x_test, y_test)
+if __name__ == "__main__":
+    evaluate_model(x_test, y_test, "Random_Forest")
+    simulate_time_stream(x_test, y_test)
