@@ -150,7 +150,6 @@ def sim_preview(limit: int = 10, model_name: str = "Random_Forest"):
     """
     Simuliert die ersten 'limit' Testdaten synchron und gibt alle
     einzelnen Predictions als JSON zurück.
-    Perfekt zum Anschauen in Swagger.
     """
     x_test = joblib.load('../data/X_test.joblib')
     y_test = joblib.load('../data/Y_test.joblib')
