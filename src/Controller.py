@@ -13,7 +13,7 @@ import pandas as pd
 from enum import Enum
 from typing import List, Optional
 
-from Main2 import simulate_time_stream, simulate_time_stream_collect, evaluate_model_metrics  # nur noch die Funktion, ohne Side-Effects
+from Main import simulate_time_stream, simulate_time_stream_collect, evaluate_model_metrics  # nur noch die Funktion, ohne Side-Effects
 from predict import do_prediction
 from db_con2 import get_ai4i_data
 
