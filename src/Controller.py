@@ -19,7 +19,23 @@ from db_con2 import get_ai4i_data
 
 #Für get_data für das Frontend zur erstellen von Grafiken
 
+from fastapi.middleware.cors import CORSMiddleware
+
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 
 class ColumnName(str, Enum):
     torque = "Torque [Nm]"
