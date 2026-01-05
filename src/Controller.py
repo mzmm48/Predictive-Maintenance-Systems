@@ -154,12 +154,15 @@ def get_data(limit: int = 10, columns: Optional[List[ColumnName]] = Query(None))
         "data": records
         }
 
+
 #Lässt das Frontend auf Auswertungskriterien des Vorhersagemodells zugreifen
 @app.get("/evaluate_model")
 def evaluate_model(model_name: ModelName = ModelName.random_forest):
 
     result = evaluate_model_metrics(model_name.value)
     return result
+
+
 #Zeigt auf Swagger die vorhersagen für x an
 @app.get("/sim_preview")
 def sim_preview(limit: int = 10, model_name: str = "Random_Forest"):

@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 
 TYPE_MAP = {"L": 0, "M": 1, "H": 2}
-DROP_COLS = ['UDI', 'Product ID', 'TWF', 'HDF', 'PWF', 'OSF', 'RNF']
+DROP_COLS = ['UDI', 'Product ID', 'TWF', 'HDF', 'PWF', 'OSF', 'RNF','TS']
 
 
 def preprocess(df_raw: pd.DataFrame) -> pd.DataFrame:
