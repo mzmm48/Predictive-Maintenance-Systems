@@ -9,7 +9,7 @@ import matplotlib
 matplotlib.use('TkAgg')
 
 
-def do_prediction(x_test, y_test, model_name: str = "Random_Forest"):
+def do_prediction(x_test, y_test=None, model_name: str = "Random_Forest"):
     with open(f"../data/models/{model_name}.pkl", "rb") as f:
         model_dict = pickle.load(f)
 

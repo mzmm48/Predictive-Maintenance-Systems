@@ -2,7 +2,7 @@
 
 import psycopg2
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timezone
 
 CONN_STR = "postgres://tsdbadmin:seleneares123@b0e1bmoiny.xe7d3cm2b8.tsdb.cloud.timescale.com:31840/tsdb?sslmode=require"
 
@@ -92,7 +92,19 @@ def fetch_new_ai4i_rows_since(last_ts: datetime, limit: int = 100) -> pd.DataFra
     """
     return read_dataframe(sql, (last_ts, limit))
 
-last_ts = get_last_pred_ts()
+def get_max_ts_ai4i() -> datetime:
+    """
+    Liefert den maximalen TS aus der Tabelle ai4i2020v2.
+    Wird genutzt, um den Checkpoint initial auf 'aktueller DB-Stand' zu setzen.
+    """
+    sql = 'SELECT MAX("TS") FROM "ai4i2020v2";'
+    with psycopg2.connect(CONN_STR) as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql)
+            row = cur.fetchone()
+            if row is None or row[0] is None:
+                raise RuntimeError('Tabelle ai4i2020v2 ist leer oder "TS" ist NULL.')
+            return row[0]
 
 
 def get_training_data(limit: int | None = None) -> pd.DataFrame:
@@ -113,7 +125,7 @@ def get_training_data(limit: int | None = None) -> pd.DataFrame:
             "Tool wear [min]",
             "Machine failure",
             "TWF", "HDF", "PWF", "OSF", "RNF"
-        FROM public."ai4i2020v2"
+        FROM "ai4i2020v2"
         ORDER BY "TS" ASC
     """
     if limit is not None:
@@ -122,3 +134,18 @@ def get_training_data(limit: int | None = None) -> pd.DataFrame:
     else:
         sql += ";"
         return read_dataframe(sql)
+
+def reset_checkpoint_replay() -> None:
+    """
+    REPLAY-Reset: setzt Checkpoint auf 1970.
+    => Danach werden ALLE vorhandenen Daten wieder verarbeitet.
+    """
+    sql = "UPDATE pipeline_state SET last_pred_ts = %s;"
+    execute(sql, (datetime(1970, 1, 1, tzinfo=timezone.utc),))
+
+
+def reset_last_pred_ts_to_db_max() -> datetime:
+    """Betrieb/Simulation: ignoriert historische Daten, ab jetzt nur neue."""
+    max_ts = get_max_ts_ai4i()
+    set_last_pred_ts(max_ts)
+    return max_ts

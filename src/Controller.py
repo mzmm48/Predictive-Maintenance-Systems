@@ -7,21 +7,23 @@
 # Wenn ihr Swagger wieder schließen wollt geht wieder in die Konsole/Terminal und drückt Strg + C
 import psycopg2
 # Controller.py
-from fastapi import FastAPI, BackgroundTasks, Query
+from fastapi import FastAPI, BackgroundTasks, Query, HTTPException
 import joblib
 import pandas as pd
 from enum import Enum
 from typing import List, Optional
-
+from predict_worker import predict_once
+from predict_service import PredictionService
 from Main import simulate_time_stream, simulate_time_stream_collect, evaluate_model_metrics  # nur noch die Funktion, ohne Side-Effects
 from predict import do_prediction
-from db_con2 import get_ai4i_data
+from db_con2 import get_ai4i_data, reset_checkpoint_replay, reset_last_pred_ts_to_db_max
 
 #Für get_data für das Frontend zur erstellen von Grafiken
 
 from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
+service = PredictionService()
 
 app.add_middleware(
     CORSMiddleware,
@@ -187,4 +189,108 @@ def sim_preview(limit: int = 10, model_name: str = "Random_Forest"):
         "model_name": model_name,
         "sample_count": len(results),
         "results": results
+    }
+
+@app.post("/predict/once")
+def api_predict_once(model_name: str = "Random_Forest", batch_size: int = 50):
+    """
+    DB -> Preprocessing -> Prediction -> Ampelstatus -> Checkpoint update
+    Gibt records inkl. probability und traffic_light zurück.
+    """
+    try:
+        result = predict_once(model_name=model_name, batch_size=batch_size)
+        return result
+    except Exception as e:
+        # Swagger soll eine klare Fehlermeldung bekommen
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/predict/start")
+def api_predict_start(interval: float = 1.0, model_name: str = "Random_Forest", batch_size: int = 50):
+    started = service.start(interval=interval, model_name=model_name, batch_size=batch_size)
+    return {
+        "started": started,
+        "status": service.status()
+    }
+
+
+@app.post("/predict/stop")
+def api_predict_stop():
+    service.stop()
+    return {"stopped": True, "status": service.status()}
+
+
+@app.get("/predict/status")
+def api_predict_status():
+    return service.status()
+
+
+@app.get("/predict/latest")
+def api_predict_latest():
+    """
+    Liefert den aktuellsten Ampelstatus (letzter Record aus dem letzten predict_once Batch).
+    Ideal fürs Frontend-Ampelsystem.
+    """
+    st = service.status()
+
+    last_result = st.get("last_result")
+    if not last_result:
+        return {
+            "running": st.get("running", False),
+            "message": "no prediction result yet - start service or call /predict/once",
+            "latest": None
+        }
+
+    records = last_result.get("records", [])
+    if not records:
+        return {
+            "running": st.get("running", False),
+            "message": "no records in last_result (no new data?)",
+            "latest": None,
+            "summary": last_result.get("summary")
+        }
+
+    latest = records[-1]  # letzter Messpunkt im Batch
+
+    return {
+        "running": st.get("running", False),
+        "model_name": st.get("model_name"),
+        "interval": st.get("interval"),
+        "batch_size": st.get("batch_size"),
+        "latest": latest,
+        "summary": last_result.get("summary")
+    }
+
+@app.post("/predict/reset/replay")
+def api_reset_replay(stop_service: bool = True):
+    """
+    REPLAY: setzt last_pred_ts auf 1970.
+    => Beim nächsten Predict werden ALLE historischen Daten wieder verarbeitet.
+    """
+    if stop_service:
+        service.stop()
+
+    reset_checkpoint_replay()
+    return {
+        "reset_mode": "replay",
+        "stopped_service": stop_service,
+        "status": service.status()
+    }
+
+
+@app.post("/predict/reset/simulation")
+def api_reset_simulation(stop_service: bool = True):
+    """
+    SIMULATION/BETRIEB: setzt last_pred_ts auf MAX(TS) der aktuellen DB.
+    => Historische Daten werden ignoriert, nur neue (Simulation) wird verarbeitet.
+    """
+    if stop_service:
+        service.stop()
+
+    max_ts = reset_last_pred_ts_to_db_max()
+    return {
+        "reset_mode": "simulation",
+        "checkpoint_set_to": str(max_ts),
+        "stopped_service": stop_service,
+        "status": service.status()
     }
