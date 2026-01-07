@@ -5,35 +5,30 @@
 # Anschließend geht ihr auf den Link in der Konsole  http://127.0.0.1:8000 und dann fügt ihr noch ein /docs hinter
 # dem link ein dort könnt ihr dann alle Befehle austesten (GET POST DELETE) welche hier definiert wurden
 # Wenn ihr Swagger wieder schließen wollt geht wieder in die Konsole/Terminal und drückt Strg + C
-
-# -------------------------------------------------
-# IMPORTS
-# -------------------------------------------------
-from fastapi import FastAPI, Query, HTTPException
-import joblib                                           #Debug
-import pandas as pd                                     #Debug
+import psycopg2
+# Controller.py
+from fastapi import FastAPI, BackgroundTasks, Query, HTTPException
+import joblib
+import pandas as pd
 from enum import Enum
 from typing import List, Optional
-
 from predict_worker import predict_once
 from predict_service import PredictionService
-from evaluation_service import evaluate_model_metrics   #Debug
+from Main import simulate_time_stream, simulate_time_stream_collect, evaluate_model_metrics  # nur noch die Funktion, ohne Side-Effects
 from predict import do_prediction
-from db_con2 import get_ai4i_data
+from db_con2 import get_ai4i_data, reset_checkpoint_replay, reset_last_pred_ts_to_db_max
 from simulate_service import SimulationService
 from system_service import reset_all_internal
 
 #Für get_data für das Frontend zur erstellen von Grafiken
+
 from fastapi.middleware.cors import CORSMiddleware
 
-# -------------------------------------------------
-# APP / SERVICES SETUP/ Schemas
-# -------------------------------------------------
 app = FastAPI()
 service = PredictionService()
 sim_service = SimulationService(
     source_path="../data/ai4i2020_sim.csv",
-    udi_mode="tick",  # empfehlenswert, falls UDI unique sein könnte
+    udi_mode="tick",       # empfehlenswert, falls UDI unique sein könnte
     udi_offset=10_000_000
 )
 
@@ -60,7 +55,6 @@ class ColumnName(str, Enum):
     machine_failure = "Machine failure"
     #Erweiterbar
 
-
 class ModelName(str, Enum):
     random_forest = "Random_Forest"
     logistic_regression = "Logistic_Regression"
@@ -72,22 +66,15 @@ class ModelName(str, Enum):
     decision_tree = "Decision_Tree"
     knn = "K-Nearest_Neighbors"
 
-
 #TODO die get Methoden dienen aller erstens für das Verständnis der API die einzige die nicht dazu zählt ist
 # "getdata"
 
-
-# -------------------------------------------------
-# DEBUG / DEV
-# -------------------------------------------------
 @app.get("/")
 def root():
-    #Health-Check
     return {"message": "Hello World"}
 
-
-# DEBUG: Offline-Test mit gespeichertem Testset (nicht DB-basiert)
-@app.get("/predict_testset_failures")
+#Ausführen der Predict Method. Gibt alle were weiter die Failure = 1 sind
+@app.get("/predict")
 def get_failure_predictions(model_name: str = "Random_Forest"):
     """
     Liefert nur die Test-Samples, bei denen das Modell einen Ausfall (1) vorhersagt.
@@ -129,13 +116,40 @@ def get_failure_predictions(model_name: str = "Random_Forest"):
         "failure_predictions": failures
     }
 
+#Ausführen von def simulate_time_stream
+@app.post("/sim")
+def sim(background_tasks: BackgroundTasks,
+        delay_seconds: float = 0.50,
+        model_name: str = "Random_Forest"):
 
-# -------------------------------------------------
-# DATEN FÜRS FRONTEND
-# -------------------------------------------------
+    x_test = joblib.load('../data/X_test.joblib')
+    y_test = joblib.load('../data/Y_test.joblib')
+
+    x_test2 = x_test.reset_index(drop=True)
+    y_test2 = y_test.reset_index(drop=True)
+
+    # Simulation im Hintergrund starten
+    background_tasks.add_task(
+        simulate_time_stream,
+        x_test2,
+        y_test2,
+        delay_seconds,
+        model_name
+    )
+
+    return {
+        "status": "simulation started",
+        "n_samples": len(x_test2),
+        "delay_seconds": delay_seconds,
+        "model_name": model_name
+    }
+
+
+#Frontend bekommt angefragte Daten aus der DB (Gleichzeitige auswahl von mehreren Spalten möglich bsp. Torque und RPM)
 #TODO Wichtig behalten
 @app.get("/getdata")
 def get_data(limit: int = 10, columns: Optional[List[ColumnName]] = Query(None)):
+
     df = get_ai4i_data(limit=limit)
 
     if columns:
@@ -147,12 +161,43 @@ def get_data(limit: int = 10, columns: Optional[List[ColumnName]] = Query(None))
     return {
         "row_count": len(records),
         "data": records
+        }
+
+
+#Lässt das Frontend auf Auswertungskriterien des Vorhersagemodells zugreifen
+@app.get("/evaluate_model")
+def evaluate_model(model_name: ModelName = ModelName.random_forest):
+
+    result = evaluate_model_metrics(model_name.value)
+    return result
+
+
+#Zeigt auf Swagger die vorhersagen für x an
+@app.get("/sim_preview")
+def sim_preview(limit: int = 10, model_name: str = "Random_Forest"):
+    """
+    Simuliert die ersten 'limit' Testdaten synchron und gibt alle
+    einzelnen Predictions als JSON zurück.
+    """
+    x_test = joblib.load('../data/X_test.joblib')
+    y_test = joblib.load('../data/Y_test.joblib')
+
+    x_test2 = x_test.reset_index(drop=True)
+    y_test2 = y_test.reset_index(drop=True)
+
+    results = simulate_time_stream_collect(
+        x_test2,
+        y_test2,
+        model_name=model_name,
+        limit=limit,
+    )
+
+    return {
+        "model_name": model_name,
+        "sample_count": len(results),
+        "results": results
     }
 
-
-# -------------------------------------------------
-# PREDICTION-PIPELINE
-# -------------------------------------------------
 @app.post("/predict/once")
 def api_predict_once(model_name: str = "Random_Forest", batch_size: int = 50):
     """
@@ -223,10 +268,41 @@ def api_predict_latest():
         "summary": last_result.get("summary")
     }
 
+@app.post("/predict/reset/replay")
+def api_reset_replay(stop_service: bool = True):
+    """
+    REPLAY: setzt last_pred_ts auf 1970.
+    => Beim nächsten Predict werden ALLE historischen Daten wieder verarbeitet.
+    """
+    if stop_service:
+        service.stop()
 
-# -------------------------------------------------
-# Simulation
-# -------------------------------------------------
+    reset_checkpoint_replay()
+    return {
+        "reset_mode": "replay",
+        "stopped_service": stop_service,
+        "status": service.status()
+    }
+
+
+@app.post("/predict/reset/simulation")
+def api_reset_simulation(stop_service: bool = True):
+    """
+    SIMULATION/BETRIEB: setzt last_pred_ts auf MAX(TS) der aktuellen DB.
+    => Historische Daten werden ignoriert, nur neue (Simulation) wird verarbeitet.
+    """
+    if stop_service:
+        service.stop()
+
+    max_ts = reset_last_pred_ts_to_db_max()
+    return {
+        "reset_mode": "simulation",
+        "checkpoint_set_to": str(max_ts),
+        "stopped_service": stop_service,
+        "status": service.status()
+    }
+
+
 @app.post("/simulation/start")
 def simulation_start(interval: float = 1.0):
     return sim_service.start(interval=interval)
@@ -247,13 +323,10 @@ def simulation_reset():
     return sim_service.reset()
 
 
-# -------------------------------------------------
-# Systemsteuerung
-# -------------------------------------------------
 @app.post("/system/reset_all")
 def system_reset_all(
-        mode: str = "simulation",
-        delete_sim_data: bool = True,
+    mode: str = "simulation",
+    delete_sim_data: bool = True,
 ):
     sim_reset_result, checkpoint_info = reset_all_internal(
         prediction_service=service,
@@ -274,12 +347,12 @@ def system_reset_all(
 
 @app.post("/system/start_demo")
 def system_start_demo(
-        sim_interval: float = 1.0,
-        predict_interval: float = 1.0,
-        batch_size: int = 50,
-        model_name: str = "Random_Forest",
-        mode: str = "simulation",
-        delete_sim_data: bool = True,
+    sim_interval: float = 1.0,
+    predict_interval: float = 1.0,
+    batch_size: int = 50,
+    model_name: str = "Random_Forest",
+    mode: str = "simulation",
+    delete_sim_data: bool = True,
 ):
     # 1) Reset
     sim_reset_result, checkpoint_info = reset_all_internal(
@@ -314,24 +387,3 @@ def system_start_demo(
             "status": service.status(),
         },
     }
-
-
-@app.post("/system/stop_demo")
-def system_stop_demo():
-    service.stop()
-    sim_service.stop()
-    return {
-        "stopped": True,
-        "predict_status": service.status(),
-        "simulation_status": sim_service.status()
-    }
-
-
-# -------------------------------------------------
-# Evaluation
-# -------------------------------------------------
-#Lässt das Frontend auf Auswertungskriterien des Vorhersagemodells zugreifen
-@app.get("/evaluate_model")
-def evaluate_model(model_name: ModelName = ModelName.random_forest):
-    result = evaluate_model_metrics(model_name.value)
-    return result

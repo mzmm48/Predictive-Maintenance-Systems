@@ -149,3 +149,51 @@ def reset_last_pred_ts_to_db_max() -> datetime:
     max_ts = get_max_ts_ai4i()
     set_last_pred_ts(max_ts)
     return max_ts
+
+
+def insert_ai4i_row(row: dict) -> None:
+    """
+    Fügt genau einen Datensatz in ai4i2020v2 ein.
+    Erwartet die Spalten (mindestens) für Sensordaten + TS.
+    """
+    sql = """
+        INSERT INTO public."ai4i2020v2" (
+            "UDI", "TS", "Product ID", "Type",
+            "Air temperature [K]", "Process temperature [K]",
+            "Rotational speed [rpm]", "Torque [Nm]", "Tool wear [min]",
+            "Machine failure", "TWF", "HDF", "PWF", "OSF", "RNF"
+        )
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
+    """
+    params = (
+        row.get("UDI"),
+        row.get("TS"),
+        row.get("Product ID"),
+        row.get("Type"),
+        row.get("Air temperature [K]"),
+        row.get("Process temperature [K]"),
+        row.get("Rotational speed [rpm]"),
+        row.get("Torque [Nm]"),
+        row.get("Tool wear [min]"),
+        row.get("Machine failure", None),
+        row.get("TWF", None),
+        row.get("HDF", None),
+        row.get("PWF", None),
+        row.get("OSF", None),
+        row.get("RNF", None),
+    )
+    execute(sql, params)
+
+
+def delete_ai4i_rows_since(ts_from: datetime) -> int:
+    """
+    Löscht alle Zeilen ab einem Timestamp (z.B. Simulationsstart).
+    Achtung: Das löscht nur nach TS – daher muss Simulation TS > MAX(TS) verwenden.
+    """
+    sql = 'DELETE FROM public."ai4i2020v2" WHERE "TS" >= %s;'
+    with psycopg2.connect(CONN_STR) as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql, (ts_from,))
+            deleted = cur.rowcount
+        conn.commit()
+    return deleted

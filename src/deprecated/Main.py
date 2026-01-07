@@ -1,25 +1,24 @@
 #TODO Hauptanwendung
 import pickle
-
 import joblib
 import time
 from datetime import datetime
 from zoneinfo import ZoneInfo
-
+import numpy as np
 from matplotlib import pyplot as plt
-from sklearn.metrics import classification_report, confusion_matrix, ConfusionMatrixDisplay
+from sklearn.metrics import classification_report, confusion_matrix, accuracy_score, precision_recall_fscore_support, roc_auc_score
 
 from predict import do_prediction
 
 berlin_tz = ZoneInfo("Europe/Berlin")
 
-x_test = joblib.load('../../data/X_test.joblib')
-y_test = joblib.load('../../data/Y_test.joblib')
+x_test = joblib.load('../data/X_test.joblib')
+y_test = joblib.load('../data/Y_test.joblib')
 
 x_test2 = x_test.reset_index(drop=True)
 y_test2 = y_test.reset_index(drop=True)
 
-
+#Simuliert Zeitreihe
 def simulate_time_stream(x_test2, y_test2, delay_seconds=0.01, model_name: str = 'Random_Forest'):
 
     for i in range(len(x_test2)):
@@ -36,29 +35,101 @@ def simulate_time_stream(x_test2, y_test2, delay_seconds=0.01, model_name: str =
 
         time.sleep(delay_seconds)
 
+#Wertet das Modell aus
+def evaluate_model_metrics(model_name: str = "Random_Forest"):
 
-def evaluate_model(X_test, y_test, model_name="Random_Forest"):
+    # Testdaten laden
+    X_test = joblib.load("../data/X_test.joblib")
+    y_test = joblib.load("../data/Y_test.joblib")  # achte auf Dateinamen-Konsistenz!
+
     with open(f"../data/models/{model_name}.pkl", "rb") as f:
         model_dict = pickle.load(f)
 
-    model = model_dict['model']
-    feature_names = model_dict['features']
-    class_names = ["Kein Ausfall", "Ausfall"]
+    model = model_dict["model"]
 
+    # Vorhersagen
     y_pred = model.predict(X_test)
-    y_prob = model.predict_proba(X_test)[:, 1]
 
-    print(f"--------- {model_name} Classification Report ------ \n\n")
-    print(classification_report(y_test, y_pred))
+    # Probabilities (falls vorhanden)
+    y_prob = None
+    if hasattr(model, "predict_proba"):
+        y_prob = model.predict_proba(X_test)[:, 1]
+    elif hasattr(model, "decision_function"):
+        scores = model.decision_function(X_test)
+        y_prob = 1 / (1 + np.exp(-scores))
+
+    # Grundlegende Kennzahlen
+    acc = accuracy_score(y_test, y_pred)
+    precision, recall, f1, _ = precision_recall_fscore_support(
+        y_test, y_pred, average="binary", zero_division=0
+    )
 
     # Confusion Matrix
-    cm = confusion_matrix(y_test, y_pred)
-    disp = ConfusionMatrixDisplay(confusion_matrix=cm)
-    disp.plot(cmap='Blues')
-    plt.title(f"{model_name} - Confusion Matrix")
-    plt.show()
+    cm = confusion_matrix(y_test, y_pred).tolist()  # als Liste für JSON
+
+    # ROC-AUC falls Probabilities da
+    auc = None
+    if y_prob is not None:
+        try:
+            auc = roc_auc_score(y_test, y_prob)
+        except ValueError:
+            auc = None
+
+    # Classification Report als Text
+    report_text = classification_report(y_test, y_pred)
+
+    return {
+        "model_name": model_name,
+        "metrics": {
+            "accuracy": acc,
+            "precision": precision,
+            "recall": recall,
+            "f1": f1,
+            "roc_auc": auc,
+        },
+        "confusion_matrix": {
+            "labels": ["Kein Ausfall", "Ausfall"],
+            "matrix": cm,
+        },
+        "classification_report": report_text,
+    }
 
 
-evaluate_model(x_test, y_test, "Random_Forest")
+def simulate_time_stream_collect(x_test2, y_test2, model_name: str = 'Random_Forest', limit: int | None = None):
+    """
+    Wie simulate_time_stream, aber:
+    - KEIN sleep
+    - sammelt alle Predictions in einer Liste und gibt sie zurück.
+    - keine simulation von echt zeiten
+    """
+    results = []
 
-simulate_time_stream(x_test, y_test)
+    n_samples = len(x_test2)
+    if limit is not None:
+        n_samples = min(n_samples, limit)
+
+    for i in range(n_samples):
+        x_row = x_test2.iloc[[i]]
+        y_true = int(y_test2.iloc[i])
+
+        now = datetime.now(berlin_tz)
+
+        y_pred, y_prob = do_prediction(x_row, y_true, model_name=model_name)
+
+        # y_pred und y_prob sind Arrays -> in Python-Typen umwandeln
+        pred_int = int(y_pred[0])
+        prob_float = float(y_prob[0]) if y_prob is not None else None
+
+        results.append({
+            "index": i,
+            "timestamp": now.isoformat(),
+            "y_true": y_true,
+            "y_pred": pred_int,
+            "probability_failure": prob_float
+        })
+
+    return results
+
+if __name__ == "__main__":
+    evaluate_model(x_test, y_test, "Random_Forest")
+    simulate_time_stream(x_test, y_test)
