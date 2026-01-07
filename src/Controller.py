@@ -90,44 +90,72 @@ def root():
 @app.get("/predict_testset_failures")
 def get_failure_predictions(model_name: str = "Random_Forest"):
     """
-    Liefert nur die Test-Samples, bei denen das Modell einen Ausfall (1) vorhersagt.
+    DEBUG: Offline-Test mit gespeichertem Testset (nicht DB-basiert).
     """
-    # Testdaten laden
-    X_test = joblib.load('../data/X_test.joblib')
-    y_test = joblib.load('../data/Y_test.joblib')  # kann DataFrame oder Series seinD
+    try:
+        # 1) Artefakte laden
+        try:
+            X_test = joblib.load("../data/X_test.joblib")
+            y_test = joblib.load("../data/Y_test.joblib")
+        except FileNotFoundError as e:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Testset-Artefakte nicht gefunden: {e}"
+            )
+        except Exception as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Fehler beim Laden der Testset-Artefakte: {e}"
+            )
 
-    # y_test in eine 1D-Form bringen
-    if isinstance(y_test, pd.DataFrame):
-        y_series = y_test.iloc[:, 0]
-    else:
-        y_series = y_test
+        # 2) y in 1D bringen
+        if isinstance(y_test, pd.DataFrame):
+            if y_test.shape[1] < 1:
+                raise HTTPException(status_code=500, detail="y_test DataFrame hat keine Spalten.")
+            y_series = y_test.iloc[:, 0]
+        else:
+            y_series = y_test
 
-    # Modellvorhersage für das komplette Test-Set
-    y_pred, y_prob = do_prediction(X_test, y_series, model_name=model_name)
+        # 3) Prediction
+        try:
+            y_pred, y_prob = do_prediction(X_test, y_series, model_name=model_name)
+        except FileNotFoundError:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Modell-Datei für '{model_name}' nicht gefunden."
+            )
+        except ValueError as e:
+            # z.B. fehlende Features / falsches Format
+            raise HTTPException(status_code=400, detail=str(e))
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Prediction fehlgeschlagen: {e}")
 
-    # Wenn y_prob None ist (Modell ohne Probabilities), etwas defensiv behandeln
-    if y_prob is None:
-        y_prob_list = [None] * len(y_pred)
-    else:
-        y_prob_list = y_prob.tolist()
+        # 4) Probabilities defensiv
+        y_prob_list = [None] * len(y_pred) if y_prob is None else y_prob.tolist()
 
-    # Nur Fälle mit vorhergesagtem Ausfall (y_pred == 1) sammeln
-    failures = []
-    for idx, (true_label, pred_label, prob) in enumerate(zip(y_series, y_pred, y_prob_list)):
-        if int(pred_label) == 1:
-            failures.append({
-                "index": int(idx),
-                "true_label": int(true_label),
-                "predicted_label": int(pred_label),
-                "probability_failure": float(prob) if prob is not None else None
-            })
+        # 5) Failures filtern
+        failures = []
+        for idx, (true_label, pred_label, prob) in enumerate(zip(y_series, y_pred, y_prob_list)):
+            if int(pred_label) == 1:
+                failures.append({
+                    "index": int(idx),
+                    "true_label": int(true_label),
+                    "predicted_label": int(pred_label),
+                    "probability_failure": float(prob) if prob is not None else None
+                })
 
-    return {
-        "model_name": model_name,
-        "total_samples": len(y_series),
-        "failure_predictions_count": len(failures),
-        "failure_predictions": failures
-    }
+        return {
+            "model_name": model_name,
+            "total_samples": len(y_series),
+            "failure_predictions_count": len(failures),
+            "failure_predictions": failures
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        # Fallback
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # -------------------------------------------------
@@ -136,18 +164,41 @@ def get_failure_predictions(model_name: str = "Random_Forest"):
 #TODO Wichtig behalten
 @app.get("/getdata")
 def get_data(limit: int = 10, columns: Optional[List[ColumnName]] = Query(None)):
-    df = get_ai4i_data(limit=limit)
+    try:
+        # 1) Input validieren
+        if limit <= 0:
+            raise HTTPException(status_code=400, detail="limit muss > 0 sein.")
+        if limit > 10_000:
+            raise HTTPException(status_code=400, detail="limit ist zu groß (max 10000).")
 
-    if columns:
-        col_names = [c.value for c in columns]  # Enum -> echter Spaltenname
-        df = df[col_names]
+        # 2) DB lesen
+        try:
+            df = get_ai4i_data(limit=limit)
+        except Exception as e:
+            # DB down / falsche Tabelle / SQL Fehler
+            raise HTTPException(status_code=503, detail=f"Datenbankfehler beim Laden der Daten: {e}")
 
-    records = df.to_dict(orient="records")
+        if df is None or df.empty:
+            # Kein Fehler, aber sauber kommunizieren
+            return {"row_count": 0, "data": []}
 
-    return {
-        "row_count": len(records),
-        "data": records
-    }
+        # 3) Spalten filtern
+        if columns:
+            col_names = [c.value for c in columns]
+            missing = [c for c in col_names if c not in df.columns]
+            if missing:
+                raise HTTPException(status_code=400, detail=f"Ungültige Spalten angefragt: {missing}")
+            df = df[col_names]
+
+        return {
+            "row_count": int(len(df)),
+            "data": df.to_dict(orient="records")
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # -------------------------------------------------
@@ -155,73 +206,131 @@ def get_data(limit: int = 10, columns: Optional[List[ColumnName]] = Query(None))
 # -------------------------------------------------
 @app.post("/predict/once")
 def api_predict_once(model_name: str = "Random_Forest", batch_size: int = 50):
-    """
-    DB -> Preprocessing -> Prediction -> Ampelstatus -> Checkpoint update
-    Gibt records inkl. probability und traffic_light zurück.
-    """
     try:
-        result = predict_once(model_name=model_name, batch_size=batch_size)
+        # 1) Input validieren
+        if batch_size <= 0:
+            raise HTTPException(status_code=400, detail="batch_size muss > 0 sein.")
+        if batch_size > 10_000:
+            raise HTTPException(status_code=400, detail="batch_size ist zu groß (max 10000).")
+
+        # 2) Predict Step ausführen
+        try:
+            result = predict_once(model_name=model_name, batch_size=batch_size)
+        except FileNotFoundError:
+            raise HTTPException(status_code=404, detail=f"Modell '{model_name}' nicht gefunden.")
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        except Exception as e:
+            # typischerweise DB/SQL/Preprocess Fehler
+            raise HTTPException(status_code=503, detail=f"Prediction-Step fehlgeschlagen (DB/Pipeline): {e}")
+
         return result
+
+    except HTTPException:
+        raise
     except Exception as e:
-        # Swagger soll eine klare Fehlermeldung bekommen
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/predict/start")
 def api_predict_start(interval: float = 1.0, model_name: str = "Random_Forest", batch_size: int = 50):
-    started = service.start(interval=interval, model_name=model_name, batch_size=batch_size)
-    return {
-        "started": started,
-        "status": service.status()
-    }
+    try:
+        # 1) Input validieren
+        if interval <= 0:
+            raise HTTPException(status_code=400, detail="interval muss > 0 sein.")
+        if batch_size <= 0:
+            raise HTTPException(status_code=400, detail="batch_size muss > 0 sein.")
+
+        # 2) Service starten
+        try:
+            started = service.start(interval=interval, model_name=model_name, batch_size=batch_size)
+        except FileNotFoundError:
+            raise HTTPException(status_code=404, detail=f"Modell '{model_name}' nicht gefunden.")
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Predict-Service konnte nicht gestartet werden: {e}")
+
+        # Wenn schon läuft -> Conflict ist sauberer als "ok"
+        if started is False:
+            raise HTTPException(status_code=409, detail="Predict-Service läuft bereits.")
+
+        return {
+            "started": True,
+            "status": service.status()
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/predict/stop")
 def api_predict_stop():
-    service.stop()
-    return {"stopped": True, "status": service.status()}
+    try:
+        # Stop sollte idempotent sein (kein Fehler wenn nicht läuft)
+        try:
+            service.stop()
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Predict-Service konnte nicht gestoppt werden: {e}")
+
+        return {"stopped": True, "status": service.status()}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/predict/status")
 def api_predict_status():
-    return service.status()
+    try:
+        # status darf normalerweise nicht crashen
+        try:
+            return service.status()
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Status konnte nicht gelesen werden: {e}")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/predict/latest")
 def api_predict_latest():
-    """
-    Liefert den aktuellsten Ampelstatus (letzter Record aus dem letzten predict_once Batch).
-    Ideal fürs Frontend-Ampelsystem.
-    """
-    st = service.status()
+    try:
+        st = service.status()
 
-    last_result = st.get("last_result")
-    if not last_result:
+        last_result = st.get("last_result")
+        if not last_result:
+            # Kein Fehler: es gab einfach noch keine Runs
+            raise HTTPException(
+                status_code=404,
+                detail="Noch kein Prediction-Ergebnis vorhanden. Bitte /predict/start oder /predict/once aufrufen."
+            )
+
+        records = last_result.get("records", [])
+        if not records:
+            # Kein Fehler in der Pipeline, aber aktuell nichts Neues
+            raise HTTPException(
+                status_code=204,
+                detail="Kein neuer Record im letzten Ergebnis (keine neuen Daten)."
+            )
+
+        latest = records[-1]
+
         return {
             "running": st.get("running", False),
-            "message": "no prediction result yet - start service or call /predict/once",
-            "latest": None
-        }
-
-    records = last_result.get("records", [])
-    if not records:
-        return {
-            "running": st.get("running", False),
-            "message": "no records in last_result (no new data?)",
-            "latest": None,
+            "model_name": st.get("model_name"),
+            "interval": st.get("interval"),
+            "batch_size": st.get("batch_size"),
+            "latest": latest,
             "summary": last_result.get("summary")
         }
 
-    latest = records[-1]  # letzter Messpunkt im Batch
-
-    return {
-        "running": st.get("running", False),
-        "model_name": st.get("model_name"),
-        "interval": st.get("interval"),
-        "batch_size": st.get("batch_size"),
-        "latest": latest,
-        "summary": last_result.get("summary")
-    }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # -------------------------------------------------
@@ -229,22 +338,73 @@ def api_predict_latest():
 # -------------------------------------------------
 @app.post("/simulation/start")
 def simulation_start(interval: float = 1.0):
-    return sim_service.start(interval=interval)
+    try:
+        if interval <= 0:
+            raise HTTPException(status_code=400, detail="interval muss > 0 sein.")
+
+        try:
+            result = sim_service.start(interval=interval)
+        except FileNotFoundError:
+            raise HTTPException(status_code=404, detail="Simulations-CSV nicht gefunden.")
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Simulation konnte nicht gestartet werden: {e}")
+
+        # Falls Service schon läuft: 409
+        if isinstance(result, dict) and result.get("started") is False:
+            raise HTTPException(status_code=409, detail=result.get("message", "Simulation läuft bereits."))
+
+        return result
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/simulation/stop")
 def simulation_stop():
-    return sim_service.stop()
+    try:
+        try:
+            return sim_service.stop()
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Simulation konnte nicht gestoppt werden: {e}")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/simulation/status")
 def simulation_status():
-    return sim_service.status()
+    try:
+        try:
+            return sim_service.status()
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Simulation-Status konnte nicht gelesen werden: {e}")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/simulation/reset")
 def simulation_reset():
-    return sim_service.reset()
+    try:
+        try:
+            result = sim_service.reset()
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Simulation-Reset fehlgeschlagen: {e}")
+
+        # Wenn nie gestartet -> 409 (Konflikt/Zustand)
+        if isinstance(result, dict) and result.get("reset") is False:
+            raise HTTPException(status_code=409, detail=result.get("message", "Reset nicht möglich."))
+
+        return result
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # -------------------------------------------------
@@ -252,79 +412,132 @@ def simulation_reset():
 # -------------------------------------------------
 @app.post("/system/reset_all")
 def system_reset_all(
-        mode: str = "simulation",
-        delete_sim_data: bool = True,
+    mode: str = "simulation",
+    delete_sim_data: bool = True,
 ):
-    sim_reset_result, checkpoint_info = reset_all_internal(
-        prediction_service=service,
-        simulation_service=sim_service,
-        mode=mode,
-        delete_sim_data=delete_sim_data,
-    )
+    try:
+        # mode validieren (sonst "silent wrong")
+        if mode not in ("simulation", "replay"):
+            raise HTTPException(status_code=400, detail="mode muss 'simulation' oder 'replay' sein.")
 
-    return {
-        "ok": True,
-        "delete_sim_data": delete_sim_data,
-        "simulation_reset": sim_reset_result,
-        "checkpoint": checkpoint_info,
-        "predict_status": service.status(),
-        "simulation_status": sim_service.status(),
-    }
+        try:
+            sim_reset_result, checkpoint_info = reset_all_internal(
+                prediction_service=service,
+                simulation_service=sim_service,
+                mode=mode,
+                delete_sim_data=delete_sim_data,
+            )
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"System-Reset fehlgeschlagen: {e}")
+
+        return {
+            "ok": True,
+            "delete_sim_data": delete_sim_data,
+            "simulation_reset": sim_reset_result,
+            "checkpoint": checkpoint_info,
+            "predict_status": service.status(),
+            "simulation_status": sim_service.status(),
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/system/start_demo")
 def system_start_demo(
-        sim_interval: float = 1.0,
-        predict_interval: float = 1.0,
-        batch_size: int = 50,
-        model_name: str = "Random_Forest",
-        mode: str = "simulation",
-        delete_sim_data: bool = True,
+    sim_interval: float = 1.0,
+    predict_interval: float = 1.0,
+    batch_size: int = 50,
+    model_name: str = "Random_Forest",
+    mode: str = "simulation",
+    delete_sim_data: bool = True,
 ):
-    # 1) Reset
-    sim_reset_result, checkpoint_info = reset_all_internal(
-        prediction_service=service,
-        simulation_service=sim_service,
-        mode=mode,
-        delete_sim_data=delete_sim_data,
-    )
+    try:
+        # Inputs validieren
+        if sim_interval <= 0 or predict_interval <= 0:
+            raise HTTPException(status_code=400, detail="sim_interval und predict_interval müssen > 0 sein.")
+        if batch_size <= 0:
+            raise HTTPException(status_code=400, detail="batch_size muss > 0 sein.")
+        if mode not in ("simulation", "replay"):
+            raise HTTPException(status_code=400, detail="mode muss 'simulation' oder 'replay' sein.")
 
-    # 2) Simulation starten
-    sim_start_result = sim_service.start(interval=sim_interval)
+        # Reset
+        try:
+            sim_reset_result, checkpoint_info = reset_all_internal(
+                prediction_service=service,
+                simulation_service=sim_service,
+                mode=mode,
+                delete_sim_data=delete_sim_data,
+            )
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Reset vor Demo-Start fehlgeschlagen: {e}")
 
-    # 3) Prediction starten
-    started_predict = service.start(
-        interval=predict_interval,
-        model_name=model_name,
-        batch_size=batch_size,
-    )
+        # Simulation starten
+        try:
+            sim_start_result = sim_service.start(interval=sim_interval)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Simulation-Start fehlgeschlagen: {e}")
 
-    return {
-        "ok": True,
-        "reset": {
-            "simulation_reset": sim_reset_result,
-            "checkpoint": checkpoint_info,
-        },
-        "simulation": sim_start_result,
-        "prediction": {
-            "started": started_predict,
-            "interval": predict_interval,
-            "batch_size": batch_size,
-            "model_name": model_name,
-            "status": service.status(),
-        },
-    }
+        # Predict starten
+        try:
+            started_predict = service.start(
+                interval=predict_interval,
+                model_name=model_name,
+                batch_size=batch_size,
+            )
+        except FileNotFoundError:
+            raise HTTPException(status_code=404, detail=f"Modell '{model_name}' nicht gefunden.")
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Predict-Service Start fehlgeschlagen: {e}")
+
+        # Wenn Predict schon läuft -> 409
+        if started_predict is False:
+            raise HTTPException(status_code=409, detail="Predict-Service läuft bereits.")
+
+        return {
+            "ok": True,
+            "reset": {
+                "simulation_reset": sim_reset_result,
+                "checkpoint": checkpoint_info,
+            },
+            "simulation": sim_start_result,
+            "prediction": {
+                "started": True,
+                "interval": predict_interval,
+                "batch_size": batch_size,
+                "model_name": model_name,
+                "status": service.status(),
+            },
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/system/stop_demo")
 def system_stop_demo():
-    service.stop()
-    sim_service.stop()
-    return {
-        "stopped": True,
-        "predict_status": service.status(),
-        "simulation_status": sim_service.status()
-    }
+    try:
+        # Idempotent: stoppt beide Dienste, egal ob sie laufen
+        try:
+            service.stop()
+            sim_service.stop()
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Stop Demo fehlgeschlagen: {e}")
+
+        return {
+            "stopped": True,
+            "predict_status": service.status(),
+            "simulation_status": sim_service.status()
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # -------------------------------------------------
@@ -333,5 +546,20 @@ def system_stop_demo():
 #Lässt das Frontend auf Auswertungskriterien des Vorhersagemodells zugreifen
 @app.get("/evaluate_model")
 def evaluate_model(model_name: ModelName = ModelName.random_forest):
-    result = evaluate_model_metrics(model_name.value)
-    return result
+    try:
+        try:
+            result = evaluate_model_metrics(model_name.value)
+            if result is None:
+                raise HTTPException(status_code=500, detail="evaluate_model_metrics hat None zurückgegeben.")
+            return result
+        except FileNotFoundError:
+            raise HTTPException(status_code=404, detail=f"Modell '{model_name.value}' nicht gefunden.")
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Evaluation fehlgeschlagen: {e}")
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
