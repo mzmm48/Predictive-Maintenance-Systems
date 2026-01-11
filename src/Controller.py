@@ -26,6 +26,13 @@ from system_service import reset_all_internal
 #Für get_data für das Frontend zur erstellen von Grafiken
 from fastapi.middleware.cors import CORSMiddleware
 
+from fastapi import Request, Response
+from pydantic import BaseModel
+from jose import jwt, JWTError
+from datetime import datetime, timedelta, timezone
+import os
+
+from db_con2 import read_dataframe
 # -------------------------------------------------
 # APP / SERVICES SETUP/ Schemas
 # -------------------------------------------------
@@ -75,6 +82,91 @@ class ModelName(str, Enum):
 
 #TODO die get Methoden dienen aller erstens für das Verständnis der API die einzige die nicht dazu zählt ist
 # "getdata"
+
+# -------------------------------------------------
+# AUTH (JWT in HttpOnly Cookie) - nutzt Tabelle "anmeldung"
+# -------------------------------------------------
+
+JWT_SECRET = os.getenv("PMS_JWT_SECRET", "dev-secret-change-me")
+JWT_ALG = "HS256"
+COOKIE_NAME = "pms_access_token"
+TOKEN_TTL_MINUTES = 8 * 60  # 8 Stunden
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+def create_access_token(username: str, role: str):
+    now = datetime.now(timezone.utc)
+    payload = {
+        "sub": username,
+        "role": role,
+        "iat": int(now.timestamp()),
+        "exp": int((now + timedelta(minutes=TOKEN_TTL_MINUTES)).timestamp()),
+    }
+    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALG)
+
+def read_user_from_cookie(request: Request):
+    token = request.cookies.get(COOKIE_NAME)
+    if not token:
+        return None
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALG])
+        return {"username": payload.get("sub"), "role": payload.get("role")}
+    except JWTError:
+        return None
+
+@app.post("/auth/login")
+def auth_login(req: LoginRequest, response: Response):
+    # Achtung: Spaltennamen sind case-sensitive und enthalten Bindestrich -> immer "..."
+    df = read_dataframe(
+        'SELECT "Username","Vorname","Nachname","Passwort","E-Mail","Rolle" '
+        'FROM public.anmeldung WHERE "Username" = %s LIMIT 1;',
+        (req.username,)
+    )
+
+    if df.empty:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+
+    row = df.iloc[0].to_dict()
+
+    # Passwort ist bei euch Klartext in der DB -> Klartextvergleich
+    if req.password != str(row.get("Passwort", "")):
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+
+    role = str(row.get("Rolle", "user"))
+    token = create_access_token(req.username, role)
+
+    response.set_cookie(
+        key=COOKIE_NAME,
+        value=token,
+        httponly=True,
+        secure=False,     # lokal ok; prod: True + HTTPS
+        samesite="lax",
+        max_age=TOKEN_TTL_MINUTES * 60,
+        path="/",
+    )
+
+    return {
+        "ok": True,
+        "username": req.username,
+        "role": role,
+        "vorname": row.get("Vorname"),
+        "nachname": row.get("Nachname"),
+        "email": row.get("E-Mail"),
+    }
+
+@app.get("/auth/me")
+def auth_me(request: Request):
+    user = read_user_from_cookie(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    return {"ok": True, **user}
+
+@app.post("/auth/logout")
+def auth_logout(response: Response):
+    response.delete_cookie(key=COOKIE_NAME, path="/")
+    return {"ok": True}
 
 
 # -------------------------------------------------
