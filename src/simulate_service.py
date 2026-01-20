@@ -6,17 +6,9 @@ import pandas as pd
 
 from db_con2 import get_max_ts_ai4i, insert_ai4i_row, delete_ai4i_rows_since
 
-
+# Simulation-Service: streamt CSV-Zeilen als "neue" Sensordaten in die DB (mit monoton steigender TS-Logik)
 class SimulationService:
-    """
-    Simuliert Sensordaten-Streaming, indem Zeilen aus einer CSV in die DB eingefügt werden.
-
-    Ziele:
-    - TS ist streng monoton steigend (wichtig für Predict-Checkpoint-Logik: TS > last_pred_ts)
-    - optional: UDI eindeutig machen (falls DB UNIQUE/PRIMARY KEY auf UDI hat)
-    - Reset löscht alle Simulationsdaten (TS >= sim_start_ts)
-    """
-
+    # Initialisierung: lädt CSV-Quelle, setzt Default-Parameter und initialisiert Thread-/Zustandsvariablen
     def __init__(
         self,
         source_path: str = "../data/ai4i2020_sim.csv",
@@ -51,6 +43,7 @@ class SimulationService:
         self._inserted_rows = 0
         self._last_insert_ts = None
 
+    # Row-Preparation: setzt einen monotonen TS und optional eine eindeutige UDI, bevor in die DB inseriert wird
     def _prepare_row(self, row: Dict[str, Any]) -> Dict[str, Any]:
         """Setzt TS (monoton) und optional UDI eindeutig."""
         # TS strikt monoton: base_ts + tick * interval
@@ -74,6 +67,7 @@ class SimulationService:
 
         return row
 
+    # Worker-Loop: läuft im Hintergrundthread und inseriert fortlaufend CSV-Zeilen in die DB
     def _run(self):
         self._running = True
         try:
@@ -100,6 +94,7 @@ class SimulationService:
         finally:
             self._running = False
 
+    # Start: initialisiert Basistimestamp (MAX(TS)+1s), setzt Zähler zurück und startet den Simulations-Thread
     def start(self, interval: float = 1.0) -> Dict[str, Any]:
         """Startet die Simulation (wenn nicht schon aktiv)."""
         if self._thread is not None and self._thread.is_alive():
@@ -135,11 +130,13 @@ class SimulationService:
             "udi_offset": self._udi_offset,
         }
 
+    # Stop: signalisiert dem Worker, beim nächsten Loop zu beenden (Thread endet nach aktuellem Sleep/Run)
     def stop(self) -> Dict[str, Any]:
         """Stoppt die Simulation (Thread endet beim nächsten Loop)."""
         self._stop_event.set()
         return {"stopped": True, "status": self.status()}
 
+    # Reset: stoppt die Simulation und löscht alle ab sim_start_ts eingefügten Simulationszeilen aus der DB
     def reset(self) -> Dict[str, Any]:
         """
         Stoppt und löscht alle Simulationsdaten (TS >= sim_start_ts).
@@ -162,6 +159,7 @@ class SimulationService:
 
         return {"reset": True, "deleted_rows": deleted, "deleted_since": str(old_start)}
 
+    # Status: liefert Laufzustand und Debug-Infos (Index/Tick/Insert-Zähler/Letzter TS) für Controller-Endpoints
     def status(self) -> Dict[str, Any]:
         return {
             "running": self._running,

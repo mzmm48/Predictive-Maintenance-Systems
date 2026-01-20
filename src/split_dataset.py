@@ -11,7 +11,7 @@ INPUT_PATH = "../data/ai4i2020.csv"
 TRAIN_PATH = "../data/ai4i2020_train.csv"
 SIM_PATH = "../data/ai4i2020_sim.csv"
 
-
+#Trennt Originale CSV in Train und Sim Daten
 def split_csv_stratified():
     df = pd.read_csv(INPUT_PATH)
 

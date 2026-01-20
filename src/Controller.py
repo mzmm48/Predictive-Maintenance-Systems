@@ -1,27 +1,28 @@
-#TODO um eine Verbindung mit Swagger zu erstellen müsst ihr in der Konsole/Terminal das eingeben
-# 1. cd src
-# 2.ls
-# 3. uvicorn Controller:app --reload
-# Anschließend geht ihr auf den Link in der Konsole  http://127.0.0.1:8000 und dann fügt ihr noch ein /docs hinter
-# dem link ein dort könnt ihr dann alle Befehle austesten (GET POST DELETE) welche hier definiert wurden
-# Wenn ihr Swagger wieder schließen wollt geht wieder in die Konsole/Terminal und drückt Strg + C
+# Controller.py – FastAPI Backend für Predictive Maintenance (Demo/Testbetrieb)
 
-# -------------------------------------------------
+# Swagger starten (lokal):
+# Terminal öffnen
+# cd src
+# ls
+# uvicorn Controller:app --reload
+# Anschließend geht auf den Link in der Konsole  http://127.0.0.1:8000 und dann fügt ihr noch ein /docs dran
+# API stoppen:
+# - Terminal fokussieren und Strg + C drücken.
+
 # IMPORTS
-# -------------------------------------------------
 from fastapi import FastAPI, Query, HTTPException
-import joblib                                           #Debug
-import pandas as pd                                     #Debug
+import joblib                                           # Debug : Laden von lokalen Artefakten (X_test.joblib / y_test.joblib)
+import pandas as pd                                     # Debug: y_test Handling, DataFrame-Checks
 from enum import Enum
 from typing import List, Optional
 
-from predict_worker import predict_once
-from predict_service import PredictionService
-from evaluation_service import evaluate_model_metrics   #Debug
-from predict import do_prediction
-from db_con2 import get_ai4i_data
-from simulate_service import SimulationService
-from system_service import reset_all_internal
+from predict_worker import predict_once                 # One-shot Pipeline Step (DB -> preprocess -> predict)
+from predict_service import PredictionService           # Hintergrundservice: ruft predict_once im Intervall auf
+from evaluation_service import evaluate_model_metrics   # Debug Evaluation-Endpunkt (z. B. Accuracy, Recall, etc.)
+from predict import do_prediction                       # Model-Inferenz (inkl. predict_proba fallback)
+from db_con2 import get_ai4i_data                       # DB-Zugriff (Frontend-Daten + Auth-Query)
+from simulate_service import SimulationService          # Simulation: schreibt neue Datensätze in DB
+from system_service import reset_all_internal           # System-Reset: stoppt Services, setzt Checkpoints, etc.
 
 #Für get_data für das Frontend zur erstellen von Grafiken
 from fastapi.middleware.cors import CORSMiddleware
@@ -33,17 +34,18 @@ from datetime import datetime, timedelta, timezone
 import os
 
 from db_con2 import read_dataframe
-# -------------------------------------------------
+
 # APP / SERVICES SETUP/ Schemas
-# -------------------------------------------------
 app = FastAPI()
 service = PredictionService()
+# Simulation-Service: schreibt aus CSV schrittweise neue Zeilen in die ai4i2020v2 Tabelle
 sim_service = SimulationService(
     source_path="../data/ai4i2020_sim.csv",
-    udi_mode="tick",  # empfehlenswert, falls UDI unique sein könnte
-    udi_offset=10_000_000
+    udi_mode="tick",                           # erzeugt eindeutige UDI/IDs für Simulationsdaten
+    udi_offset=10_000_000                      # vermeidung von schon bestehenden UDIs
 )
 
+# CORS: erlaubt Zugriff vom Frontend
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -57,7 +59,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
+# Enum: Erlaubte Spaltennamen
 class ColumnName(str, Enum):
     torque = "Torque [Nm]"
     rpm = "Rotational speed [rpm]"
@@ -80,13 +82,7 @@ class ModelName(str, Enum):
     knn = "K-Nearest_Neighbors"
 
 
-#TODO die get Methoden dienen aller erstens für das Verständnis der API die einzige die nicht dazu zählt ist
-# "getdata"
-
-# -------------------------------------------------
-# AUTH (JWT in HttpOnly Cookie) - nutzt Tabelle "anmeldung"
-# -------------------------------------------------
-
+# Auth (JWT in HttpOnly Cookie) - nutzt Tabelle "anmeldung"
 JWT_SECRET = os.getenv("PMS_JWT_SECRET", "dev-secret-change-me")
 JWT_ALG = "HS256"
 COOKIE_NAME = "pms_access_token"
@@ -169,9 +165,10 @@ def auth_logout(response: Response):
     return {"ok": True}
 
 
-# -------------------------------------------------
-# DEBUG / DEV
-# -------------------------------------------------
+
+# Debug / DEV
+
+# Root: einfacher Endpoint um zu prüfen ob API läuft
 @app.get("/")
 def root():
     #Health-Check
@@ -181,9 +178,6 @@ def root():
 # DEBUG: Offline-Test mit gespeichertem Testset (nicht DB-basiert)
 @app.get("/predict_testset_failures")
 def get_failure_predictions(model_name: str = "Random_Forest"):
-    """
-    DEBUG: Offline-Test mit gespeichertem Testset (nicht DB-basiert).
-    """
     try:
         # 1) Artefakte laden
         try:
@@ -250,10 +244,8 @@ def get_failure_predictions(model_name: str = "Random_Forest"):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# -------------------------------------------------
-# DATEN FÜRS FRONTEND
-# -------------------------------------------------
-#TODO Wichtig behalten
+
+# Daten-Endpoint: liefert Datensätze aus DB
 @app.get("/getdata")
 def get_data(limit: int = 10, columns: Optional[List[ColumnName]] = Query(None)):
     try:
@@ -293,9 +285,8 @@ def get_data(limit: int = 10, columns: Optional[List[ColumnName]] = Query(None))
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# -------------------------------------------------
-# PREDICTION-PIPELINE
-# -------------------------------------------------
+
+# Prediction (One-shot): führt einen einzelnen Pipeline-Durchlauf
 @app.post("/predict/once")
 def api_predict_once(model_name: str = "Random_Forest", batch_size: int = 50):
     try:
@@ -323,7 +314,7 @@ def api_predict_once(model_name: str = "Random_Forest", batch_size: int = 50):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-
+# Prediction-Service starten: startet Hintergrundservice, der predict_once in Intervallen ausführt
 @app.post("/predict/start")
 def api_predict_start(interval: float = 1.0, model_name: str = "Random_Forest", batch_size: int = 50):
     try:
@@ -355,11 +346,10 @@ def api_predict_start(interval: float = 1.0, model_name: str = "Random_Forest", 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-
+# Prediction stoppen: beendet den Hintergrundservice
 @app.post("/predict/stop")
 def api_predict_stop():
     try:
-        # Stop sollte idempotent sein (kein Fehler wenn nicht läuft)
         try:
             service.stop()
         except Exception as e:
@@ -372,11 +362,10 @@ def api_predict_stop():
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-
+# Prediction-Status: liefert Laufstatus
 @app.get("/predict/status")
 def api_predict_status():
     try:
-        # status darf normalerweise nicht crashen
         try:
             return service.status()
         except Exception as e:
@@ -386,7 +375,7 @@ def api_predict_status():
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-
+# Letzte Prediction: liefert Ausgabe der letzten Vorhersage
 @app.get("/predict/latest")
 def api_predict_latest():
     try:
@@ -425,9 +414,7 @@ def api_predict_latest():
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# -------------------------------------------------
-# Simulation
-# -------------------------------------------------
+# Simulation starten: startet die Simulation, der in Intervallen neue Datensätze in die DB schreibt
 @app.post("/simulation/start")
 def simulation_start(interval: float = 1.0):
     try:
@@ -452,7 +439,7 @@ def simulation_start(interval: float = 1.0):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-
+# Simulation stoppen: beendet den Simulator
 @app.post("/simulation/stop")
 def simulation_stop():
     try:
@@ -465,7 +452,7 @@ def simulation_stop():
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-
+# Status der Simulation anzeigen: liefert Laufstatus und Fortschritt des Simulationsservices
 @app.get("/simulation/status")
 def simulation_status():
     try:
@@ -478,7 +465,7 @@ def simulation_status():
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-
+# Simulation zurücksetzen: setzt Simulationszustand zurück (z. B. Cursor/Checkpoint) und bereinigt ggf. DB
 @app.post("/simulation/reset")
 def simulation_reset():
     try:
@@ -498,10 +485,7 @@ def simulation_reset():
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-
-# -------------------------------------------------
-# Systemsteuerung
-# -------------------------------------------------
+# System-Reset: stoppt Services und setzt interne Zustände/Checkpoints (Simulation oder Replay)
 @app.post("/system/reset_all")
 def system_reset_all(
     mode: str = "simulation",
@@ -536,7 +520,7 @@ def system_reset_all(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-
+# Demo-Start: führt Reset aus und startet anschließend Simulation + Prediction-Service für eine Demo
 @app.post("/system/start_demo")
 def system_start_demo(
     sim_interval: float = 1.0,
@@ -609,7 +593,7 @@ def system_start_demo(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-
+# Demo-Stop: stoppt Simulation und Prediction-Service
 @app.post("/system/stop_demo")
 def system_stop_demo():
     try:
@@ -632,10 +616,9 @@ def system_stop_demo():
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# -------------------------------------------------
+
 # Evaluation
-# -------------------------------------------------
-#Lässt das Frontend auf Auswertungskriterien des Vorhersagemodells zugreifen
+# liefert Auswertungskriterien/Performance-Metriken für ein gewähltes Modell
 @app.get("/evaluate_model")
 def evaluate_model(model_name: ModelName = ModelName.random_forest):
     try:

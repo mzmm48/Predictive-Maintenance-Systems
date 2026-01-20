@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 import matplotlib
 matplotlib.use('TkAgg')
 
-
+# Inferenz-Helper: lädt ein gespeichertes Modell, richtet Features aus und liefert Prediction + (falls möglich) Probabilities zurück
 def do_prediction(x_test, y_test=None, model_name: str = "Random_Forest"):
     with open(f"../data/models/{model_name}.pkl", "rb") as f:
         model_dict = pickle.load(f)
@@ -43,37 +43,4 @@ def do_prediction(x_test, y_test=None, model_name: str = "Random_Forest"):
     return y_pred, y_prob
 
 
-""" Hatt einen Standard Threshold
-    y_pred = model.predict(x_test)
-    y_prob = model.predict_proba(x_test)[:, 1]
-"""
-#    values, counts = np.unique(y_pred, return_counts=True)
-#    print(values)
-#    print(counts)
-#    print(classification_report(y_test, y_pred))
 
-
-# TODO auslagern in seperate Funktion
-# TODO def visualize()
-"""
-    # Confusion Matrix
-    cm = confusion_matrix(y_test, y_pred)
-    disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=class_names)
-    disp.plot(cmap='Blues')
-    plt.show()
-
-    # ROC Curve
-    roc_auc = roc_auc_score(y_test, y_prob)
-    RocCurveDisplay.from_predictions(y_test, y_prob)
-    plt.show()
-
-    # Precision-Recall Curve
-    precision, recall, _ = precision_recall_curve(y_test, y_prob)
-    PrecisionRecallDisplay(precision=precision, recall=recall).plot()
-    plt.show()
-
-    acc = accuracy_score(y_test,y_pred)
-
-    print(acc)
-    print(model)
-"""

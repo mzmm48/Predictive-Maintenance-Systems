@@ -4,7 +4,7 @@ import numpy as np
 
 from sklearn.metrics import classification_report, confusion_matrix, accuracy_score, precision_recall_fscore_support, roc_auc_score
 
-
+# Modell-Evaluation: lädt Testdaten + Modell und berechnet gängige Klassifikationsmetriken
 def evaluate_model_metrics(model_name: str = "Random_Forest"):
 
     # Testdaten laden

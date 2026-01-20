@@ -3,7 +3,7 @@ from typing import Tuple, Dict, Any
 
 from db_con2 import reset_checkpoint_replay, reset_last_pred_ts_to_db_max
 
-
+# System-Reset-Helper: stoppt Prediction/Simulation, löscht optional Simulationsdaten und setzt den Checkpoint je nach Modus
 def reset_all_internal(
     *,
     prediction_service,
@@ -11,19 +11,6 @@ def reset_all_internal(
     mode: str,
     delete_sim_data: bool
 ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
-    """
-    Zentrale Reset-Logik für das gesamte System.
-
-    Stoppt:
-    - PredictionService
-    - SimulationService
-
-    Setzt:
-    - Checkpoint (replay oder simulation)
-
-    Optional:
-    - löscht Simulationsdaten aus der DB
-    """
 
     # 1) Prediction stoppen
     prediction_service.stop()

@@ -1,13 +1,12 @@
-#TODO muss zum schluss getestet werden
 import asyncio
 import psycopg2
 import pandas as pd
 from datetime import datetime, timezone
 
-# Datenquelle (für Demo)
+# Simulationsdaten laden:
 df_source = pd.read_csv("../data/ai4i2020_sim.csv")
 
-
+# DB-Insert: schreibt genau eine Sensor-Messung in die Tabelle sensor_readings
 def insert_sensor_reading(conn, row: dict, run_id: str | None = None):
     sql = """
       INSERT INTO sensor_readings(ts, machine_id, "Type","Air temperature [K]", "Process temperature [K]","Rotational speed [rpm]", "Torque [Nm]", "Tool wear [min]",processed, run_id)
@@ -26,6 +25,7 @@ def insert_sensor_reading(conn, row: dict, run_id: str | None = None):
             run_id
         ))
 
+# Simulation-Loop: iteriert zyklisch durch df_source und schreibt im angegebenen Intervall neue Messwerte in die DB
 async def simulation_loop(
     connection_string: str,
     interval_seconds: float,

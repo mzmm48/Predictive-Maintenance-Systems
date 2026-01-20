@@ -5,7 +5,7 @@ from db_con2 import get_last_pred_ts, set_last_pred_ts, fetch_new_ai4i_rows_sinc
 from preprocessing import preprocess
 from predict import do_prediction
 
-
+# One-shot Prediction-Step: liest Checkpoint, holt neue DB-Daten, preprocesses, führt Inferenz aus und aktualisiert den Checkpoint
 def predict_once(model_name: str = "Random_Forest", batch_size: int = 50, yellow: float = 0.40, red: float = 0.70) -> Dict[str, Any]:
     # 1) Checkpoint lesen
     last_ts = get_last_pred_ts()
@@ -62,7 +62,7 @@ def predict_once(model_name: str = "Random_Forest", batch_size: int = 50, yellow
         "summary": summary
     }
 
-#Ampelsystem für Wahrscheinlichkeiten
+#Ampelsystem für Wahrscheinlichkeiten anhand von Schwellwerten
 def traffic_light(prob: float, yellow: float = 0.40, red: float = 0.70) -> str:
     """
     Leitet aus der Ausfallwahrscheinlichkeiten einen Ampelstatus ab
