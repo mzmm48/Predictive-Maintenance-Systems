@@ -5,12 +5,12 @@
 # cd src
 # ls
 # uvicorn Controller:app --reload
-# Anschließend geht auf den Link in der Konsole  http://127.0.0.1:8000 und dann fügt ihr noch ein /docs dran
+# Anschließend geht auf den Link in der Konsole http://127.0.0.1:8000 und dann fügt ihr noch ein /docs dran
 # API stoppen:
 # - Terminal fokussieren und Strg + C drücken.
 
 # IMPORTS
-from fastapi import FastAPI, Query, HTTPException
+from fastapi import FastAPI, Query, HTTPException, Request, Response, Depends
 import joblib                                           # Debug : Laden von lokalen Artefakten (X_test.joblib / y_test.joblib)
 import pandas as pd                                     # Debug: y_test Handling, DataFrame-Checks
 from enum import Enum
@@ -24,16 +24,21 @@ from db_con2 import get_ai4i_data                       # DB-Zugriff (Frontend-D
 from simulate_service import SimulationService          # Simulation: schreibt neue Datensätze in DB
 from system_service import reset_all_internal           # System-Reset: stoppt Services, setzt Checkpoints, etc.
 
+from pathlib import Path
+from dotenv import load_dotenv
+
 #Für get_data für das Frontend zur erstellen von Grafiken
 from fastapi.middleware.cors import CORSMiddleware
 
-from fastapi import Request, Response
 from pydantic import BaseModel
 from jose import jwt, JWTError
 from datetime import datetime, timedelta, timezone
 import os
 
 from db_con2 import read_dataframe
+
+#zu sicherstellung der env
+load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
 # APP / SERVICES SETUP/ Schemas
 app = FastAPI()
@@ -112,6 +117,20 @@ def read_user_from_cookie(request: Request):
     except JWTError:
         return None
 
+#Auth-Guards (damit Endpoints NICHT ohne Login aufrufbar sind)
+def require_user(request: Request):  # ✅ NEU
+    user = read_user_from_cookie(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    return user
+
+#Brauch ich das wirklich?
+def require_admin(user=Depends(require_user)):
+    if str(user.get("role", "")).lower() != "admin":
+        raise HTTPException(status_code=403, detail="Forbidden")
+    return user
+
+
 @app.post("/auth/login")
 def auth_login(req: LoginRequest, response: Response):
     # Achtung: Spaltennamen sind case-sensitive und enthalten Bindestrich -> immer "..."
@@ -164,8 +183,6 @@ def auth_logout(response: Response):
     response.delete_cookie(key=COOKIE_NAME, path="/")
     return {"ok": True}
 
-
-
 # Debug / DEV
 
 # Root: einfacher Endpoint um zu prüfen ob API läuft
@@ -177,7 +194,7 @@ def root():
 
 # DEBUG: Offline-Test mit gespeichertem Testset (nicht DB-basiert)
 @app.get("/predict_testset_failures")
-def get_failure_predictions(model_name: str = "Random_Forest"):
+def get_failure_predictions(model_name: str = "Random_Forest", user=Depends(require_user)):
     try:
         # 1) Artefakte laden
         try:
@@ -247,7 +264,7 @@ def get_failure_predictions(model_name: str = "Random_Forest"):
 
 # Daten-Endpoint: liefert Datensätze aus DB
 @app.get("/getdata")
-def get_data(limit: int = 10, columns: Optional[List[ColumnName]] = Query(None)):
+def get_data(limit: int = 10, columns: Optional[List[ColumnName]] = Query(None), user=Depends(require_user)):
     try:
         # 1) Input validieren
         if limit <= 0:
@@ -288,7 +305,7 @@ def get_data(limit: int = 10, columns: Optional[List[ColumnName]] = Query(None))
 
 # Prediction (One-shot): führt einen einzelnen Pipeline-Durchlauf
 @app.post("/predict/once")
-def api_predict_once(model_name: str = "Random_Forest", batch_size: int = 50):
+def api_predict_once(model_name: str = "Random_Forest", batch_size: int = 50, user=Depends(require_user)):
     try:
         # 1) Input validieren
         if batch_size <= 0:
@@ -316,7 +333,7 @@ def api_predict_once(model_name: str = "Random_Forest", batch_size: int = 50):
 
 # Prediction-Service starten: startet Hintergrundservice, der predict_once in Intervallen ausführt
 @app.post("/predict/start")
-def api_predict_start(interval: float = 1.0, model_name: str = "Random_Forest", batch_size: int = 50):
+def api_predict_start(interval: float = 1.0, model_name: str = "Random_Forest", batch_size: int = 50, user=Depends(require_user)):
     try:
         # 1) Input validieren
         if interval <= 0:
@@ -348,7 +365,7 @@ def api_predict_start(interval: float = 1.0, model_name: str = "Random_Forest", 
 
 # Prediction stoppen: beendet den Hintergrundservice
 @app.post("/predict/stop")
-def api_predict_stop():
+def api_predict_stop(user=Depends(require_user)):
     try:
         try:
             service.stop()
@@ -364,7 +381,7 @@ def api_predict_stop():
 
 # Prediction-Status: liefert Laufstatus
 @app.get("/predict/status")
-def api_predict_status():
+def api_predict_status(user=Depends(require_user)):
     try:
         try:
             return service.status()
@@ -377,7 +394,7 @@ def api_predict_status():
 
 # Letzte Prediction: liefert Ausgabe der letzten Vorhersage
 @app.get("/predict/latest")
-def api_predict_latest():
+def api_predict_latest(user=Depends(require_user)):
     try:
         st = service.status()
 
@@ -416,7 +433,7 @@ def api_predict_latest():
 
 # Simulation starten: startet die Simulation, der in Intervallen neue Datensätze in die DB schreibt
 @app.post("/simulation/start")
-def simulation_start(interval: float = 1.0):
+def simulation_start(interval: float = 1.0, user=Depends(require_user)):
     try:
         if interval <= 0:
             raise HTTPException(status_code=400, detail="interval muss > 0 sein.")
@@ -441,7 +458,7 @@ def simulation_start(interval: float = 1.0):
 
 # Simulation stoppen: beendet den Simulator
 @app.post("/simulation/stop")
-def simulation_stop():
+def simulation_stop(user=Depends(require_user)):
     try:
         try:
             return sim_service.stop()
@@ -454,7 +471,7 @@ def simulation_stop():
 
 # Status der Simulation anzeigen: liefert Laufstatus und Fortschritt des Simulationsservices
 @app.get("/simulation/status")
-def simulation_status():
+def simulation_status(user=Depends(require_user)):
     try:
         try:
             return sim_service.status()
@@ -467,7 +484,7 @@ def simulation_status():
 
 # Simulation zurücksetzen: setzt Simulationszustand zurück (z. B. Cursor/Checkpoint) und bereinigt ggf. DB
 @app.post("/simulation/reset")
-def simulation_reset():
+def simulation_reset(user=Depends(require_user)):
     try:
         try:
             result = sim_service.reset()
@@ -490,6 +507,7 @@ def simulation_reset():
 def system_reset_all(
     mode: str = "simulation",
     delete_sim_data: bool = True,
+    user=Depends(require_user),
 ):
     try:
         # mode validieren (sonst "silent wrong")
@@ -529,6 +547,7 @@ def system_start_demo(
     model_name: str = "Random_Forest",
     mode: str = "simulation",
     delete_sim_data: bool = True,
+    user=Depends(require_user),
 ):
     try:
         # Inputs validieren
@@ -595,7 +614,7 @@ def system_start_demo(
 
 # Demo-Stop: stoppt Simulation und Prediction-Service
 @app.post("/system/stop_demo")
-def system_stop_demo():
+def system_stop_demo(user=Depends(require_user)):
     try:
         # Idempotent: stoppt beide Dienste, egal ob sie laufen
         try:
@@ -620,7 +639,7 @@ def system_stop_demo():
 # Evaluation
 # liefert Auswertungskriterien/Performance-Metriken für ein gewähltes Modell
 @app.get("/evaluate_model")
-def evaluate_model(model_name: ModelName = ModelName.random_forest):
+def evaluate_model(model_name: ModelName = ModelName.random_forest, user=Depends(require_user)):
     try:
         try:
             result = evaluate_model_metrics(model_name.value)

@@ -4,9 +4,32 @@ import csv
 import time
 from datetime import datetime, timedelta
 import psycopg2
+from pathlib import Path
+from dotenv import load_dotenv
+import os
 
 #Verbindung zur DB
-CONNECTION = "postgres://tsdbadmin:seleneares123@b0e1bmoiny.xe7d3cm2b8.tsdb.cloud.timescale.com:31840/tsdb?sslmode=require"
+load_dotenv(Path(__file__).resolve().parents[1] / ".env")
+
+def build_conn_str() -> str:
+    host = os.getenv("PMS_DB_HOST")
+    port = os.getenv("PMS_DB_PORT", "5432")
+    db   = os.getenv("PMS_DB_NAME")
+    user = os.getenv("PMS_DB_USER")
+    pwd  = os.getenv("PMS_DB_PASSWORD")
+    ssl  = os.getenv("PMS_DB_SSLMODE", "require")
+
+    missing = [k for k in ["PMS_DB_HOST", "PMS_DB_NAME", "PMS_DB_USER", "PMS_DB_PASSWORD"] if not os.getenv(k)]
+    if missing:
+        raise RuntimeError(f"Missing env vars: {missing}")
+
+    # DSN-Format psycopg2 robust
+    return (
+        f"host={host} port={port} dbname={db} user={user} password={pwd} sslmode={ssl} "
+        f"connect_timeout=5 options='-c statement_timeout=8000'"
+    )
+
+CONNECTION = build_conn_str()
 
 # Import-Job: liest ai4i2020_train.csv ein und schreibt jede Zeile als Datensatz in ai4i2020V2 (TS wird pro Zeile inkrementiert)
 with psycopg2.connect(CONNECTION) as conn:

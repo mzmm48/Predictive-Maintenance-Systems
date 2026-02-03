@@ -1,29 +1,70 @@
 # db_con2.py – Datenbankzugriff (PostgreSQL/Timescale) für Predictive-Maintenance-Backend
-
+import os
 import psycopg2
 import pandas as pd
 from datetime import datetime, timezone
+from pathlib import Path
+from dotenv import load_dotenv
 
 #Verbindung zur DB
-CONN_STR = "postgres://tsdbadmin:seleneares123@b0e1bmoiny.xe7d3cm2b8.tsdb.cloud.timescale.com:31840/tsdb?sslmode=require"
 
+#env laden
+load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
+def build_conn_str() -> str:
+    host = os.getenv("PMS_DB_HOST")
+    port = os.getenv("PMS_DB_PORT", "5432")
+    db   = os.getenv("PMS_DB_NAME")
+    user = os.getenv("PMS_DB_USER")
+    pwd  = os.getenv("PMS_DB_PASSWORD")
+    ssl  = os.getenv("PMS_DB_SSLMODE", "require")
+
+    missing = [k for k in ["PMS_DB_HOST", "PMS_DB_NAME", "PMS_DB_USER", "PMS_DB_PASSWORD"] if not os.getenv(k)]
+    if missing:
+        raise RuntimeError(f"Missing env vars: {missing}")
+
+    # DSN-Format psycopg2 robust
+    return (
+        f"host={host} port={port} dbname={db} user={user} password={pwd} sslmode={ssl} "
+        f"connect_timeout=5 options='-c statement_timeout=8000'"
+    )
+
+_CONN_STR = None
+
+def get_conn_str() -> str:
+    global _CONN_STR
+    if _CONN_STR is None:
+        _CONN_STR = build_conn_str()
+    return _CONN_STR
 
 # Generische Helfer
 
 # SELECT-Helfer: führt eine SQL-SELECT-Query aus und liefert das Ergebnis als Pandas DataFrame zurück
 def read_dataframe(sql: str, params=None) -> pd.DataFrame:
     """SELECT -> DataFrame"""
-    with psycopg2.connect(CONN_STR) as conn:
+    with psycopg2.connect(get_conn_str()) as conn:
         return pd.read_sql(sql, conn, params=params)
 
 # DML-Helfer: führt INSERT/UPDATE/DELETE aus und committet die Transaktion
 def execute(sql: str, params=None) -> None:
-    """INSERT/UPDATE/DELETE"""
-    with psycopg2.connect(CONN_STR) as conn:
+    print("EXEC: connect...", flush=True)
+    with psycopg2.connect(get_conn_str()) as conn:
+        print("EXEC: connected", flush=True)
         with conn.cursor() as cur:
-            cur.execute(sql, params)
+            print("EXEC: before cur.execute", flush=True)
+            try:
+                cur.execute(sql, params)
+                conn.commit()
+                print("Ok row count:", cur.rowcount)
+            except psycopg2.errors as e:
+                conn.rollback()
+                print("Fehler", e)
+                print("PG Code", e.pgcode)
+                print("PG Error", e.pgerror)
+            print("EXEC: after cur.execute", flush=True)
+        print("EXEC: before commit", flush=True)
         conn.commit()
+        print("EXEC: after commit", flush=True)
 
 
 
@@ -40,7 +81,6 @@ def get_ai4i_data(limit: int = 100) -> pd.DataFrame:
     return read_dataframe(sql, (limit,))
 
 
-
 # CHECKPOINT: pipeline_state
 
 # Checkpoint lesen: holt den zuletzt verarbeiteten Timestamp aus pipeline_state
@@ -50,7 +90,7 @@ def get_last_pred_ts() -> datetime:
     Erwartet genau eine Zeile.
     """
     sql = "SELECT last_pred_ts FROM pipeline_state LIMIT 1;"
-    with psycopg2.connect(CONN_STR) as conn:
+    with psycopg2.connect(get_conn_str()) as conn:
         with conn.cursor() as cur:
             cur.execute(sql)
             row = cur.fetchone()
@@ -94,7 +134,7 @@ def fetch_new_ai4i_rows_since(last_ts: datetime, limit: int = 100) -> pd.DataFra
 # Hilfsfunktion: liefert den maximalen Timestamp (TS) aus ai4i2020v2 (z. B. für initiales Setzen des Checkpoints)
 def get_max_ts_ai4i() -> datetime:
     sql = 'SELECT MAX("TS") FROM "ai4i2020v2";'
-    with psycopg2.connect(CONN_STR) as conn:
+    with psycopg2.connect(get_conn_str()) as conn:
         with conn.cursor() as cur:
             cur.execute(sql)
             row = cur.fetchone()
@@ -166,12 +206,14 @@ def insert_ai4i_row(row: dict) -> None:
         row.get("OSF", None),
         row.get("RNF", None),
     )
+    print("BEFOR")
     execute(sql, params)
+    print("AFTER")
 
 # Delete-Helper: löscht alle Datensätze ab einem Timestamp (typisch: Simulationsdaten ab Startzeitpunkt entfernen)
 def delete_ai4i_rows_since(ts_from: datetime) -> int:
     sql = 'DELETE FROM public."ai4i2020v2" WHERE "TS" >= %s;'
-    with psycopg2.connect(CONN_STR) as conn:
+    with psycopg2.connect(get_conn_str()) as conn:
         with conn.cursor() as cur:
             cur.execute(sql, (ts_from,))
             deleted = cur.rowcount
