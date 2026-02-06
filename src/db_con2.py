@@ -75,7 +75,7 @@ def get_ai4i_data(limit: int = 100) -> pd.DataFrame:
     sql = """
         SELECT *
         FROM "ai4i2020v2"
-        ORDER BY "TS" ASC
+        ORDER BY "TS" DESC
         LIMIT %s;
     """
     return read_dataframe(sql, (limit,))

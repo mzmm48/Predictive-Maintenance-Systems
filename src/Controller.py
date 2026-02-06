@@ -11,6 +11,7 @@
 
 # IMPORTS
 from fastapi import FastAPI, Query, HTTPException, Request, Response, Depends
+from fastapi.responses import JSONResponse
 import joblib                                           # Debug : Laden von lokalen Artefakten (X_test.joblib / y_test.joblib)
 import pandas as pd                                     # Debug: y_test Handling, DataFrame-Checks
 from enum import Enum
@@ -53,16 +54,29 @@ sim_service = SimulationService(
 # CORS: erlaubt Zugriff vom Frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-    ],
+    allow_origin_regex=r"^http://(localhost|127\.0\.0\.1)(:\d+)?$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Minimaler CSRF-Schutz via Origin-Check (state-changing Requests)
+ALLOWED_ORIGINS = {
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
+}
+
+@app.middleware("http")
+async def csrf_origin_check(request: Request, call_next):
+    if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
+        origin = request.headers.get("origin")
+        if origin and origin not in ALLOWED_ORIGINS:
+            return JSONResponse(status_code=403, content={"detail": "CSRF blocked (bad origin)"})
+    return await call_next(request)
 
 # Enum: Erlaubte Spaltennamen
 class ColumnName(str, Enum):
@@ -323,6 +337,12 @@ def api_predict_once(model_name: str = "Random_Forest", batch_size: int = 50, us
         except Exception as e:
             # typischerweise DB/SQL/Preprocess Fehler
             raise HTTPException(status_code=503, detail=f"Prediction-Step fehlgeschlagen (DB/Pipeline): {e}")
+       
+        # ✅ WICHTIG: auch bei /predict/once muss latest funktionieren
+        # /predict/latest liest aus dem PredictionService, also spiegeln wir das Ergebnis dort rein
+        service._last_result = result
+        service._model_name = model_name
+        service._batch_size = batch_size
 
         return result
 

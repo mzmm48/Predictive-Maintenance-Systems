@@ -1,0 +1,30 @@
+services:
+  tsdb1:
+    image: timescale/timescaledb:latest-pg16
+    container_name: tsdb1
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin
+      POSTGRES_DB: db1
+    ports:
+      - "5436:5432"
+    volumes:
+      - tsdb1_data:/var/lib/postgresql/data
+      - ./tsdb1/init.sql:/docker-entrypoint-initdb.d/init.sql
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@example.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - "5050:80"
+    depends_on:
+      - tsdb1
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+
+volumes:
+  tsdb1_data:
+  pgadmin_data:
