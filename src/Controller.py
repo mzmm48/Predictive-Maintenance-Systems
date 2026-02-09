@@ -132,7 +132,7 @@ def read_user_from_cookie(request: Request):
         return None
 
 #Auth-Guards (damit Endpoints NICHT ohne Login aufrufbar sind)
-def require_user(request: Request):  # ✅ NEU
+def require_user(request: Request):
     user = read_user_from_cookie(request)
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated")
