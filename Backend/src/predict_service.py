@@ -2,7 +2,7 @@ import threading
 import time
 from typing import Optional, Dict, Any
 
-from src.predict_worker import predict_once
+from Backend.src.predict_worker import predict_once
 
 # Background-Service: führt predict_once in einem separaten Thread periodisch aus und hält den letzten Run-Output vor
 class PredictionService:

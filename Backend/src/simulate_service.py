@@ -8,7 +8,7 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parents[1]   # .../backend
 DATA_DIR = BASE_DIR / "data"
 
-from src.db_con2 import get_max_ts_ai4i, insert_ai4i_row, delete_ai4i_rows_since
+from Backend.src.db_con2 import get_max_ts_ai4i, insert_ai4i_row, delete_ai4i_rows_since
 
 # Simulation-Service: streamt CSV-Zeilen als "neue" Sensordaten in die DB (mit monoton steigender TS-Logik)
 class SimulationService:

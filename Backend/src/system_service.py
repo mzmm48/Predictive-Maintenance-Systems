@@ -1,7 +1,7 @@
 from fastapi import HTTPException
 from typing import Tuple, Dict, Any
 
-from src.db_con2 import reset_checkpoint_replay, reset_last_pred_ts_to_db_max
+from Backend.src.db_con2 import reset_checkpoint_replay, reset_last_pred_ts_to_db_max
 
 # System-Reset-Helper: stoppt Prediction/Simulation, löscht optional Simulationsdaten und setzt den Checkpoint je nach Modus
 def reset_all_internal(

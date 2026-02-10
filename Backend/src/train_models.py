@@ -1,9 +1,6 @@
-import os
 import pickle
 import joblib
-import numpy as np
-import pandas as pd
-from src.preprocessing import preprocess
+from Backend.src.preprocessing import preprocess
 
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegression, LogisticRegressionCV, SGDClassifier
@@ -11,7 +8,7 @@ from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier,
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.neighbors import KNeighborsClassifier
 from imblearn.over_sampling import SMOTE
-from src.db_con2 import get_training_data
+from Backend.src.db_con2 import get_training_data
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parents[1]   # .../backend

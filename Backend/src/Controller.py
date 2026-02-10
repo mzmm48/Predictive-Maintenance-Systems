@@ -2,9 +2,8 @@
 
 # Swagger starten (lokal):
 # Terminal öffnen
-# cd src
-# ls
-# uvicorn Controller:app --reload
+# Optional: ..\ .venv\Scripts\activate
+# python -m uvicorn Backend.src.Controller:app --reload
 # Anschließend geht auf den Link in der Konsole http://127.0.0.1:8000 und dann fügt ihr noch ein /docs dran
 # API stoppen:
 # - Terminal fokussieren und Strg + C drücken.
@@ -17,13 +16,13 @@ import pandas as pd                                     # Debug: y_test Handling
 from enum import Enum
 from typing import List, Optional
 
-from src.predict_worker import predict_once                 # One-shot Pipeline Step (DB -> preprocess -> predict)
-from src.predict_service import PredictionService           # Hintergrundservice: ruft predict_once im Intervall auf
-from src.evaluation_service import evaluate_model_metrics   # Debug Evaluation-Endpunkt (z. B. Accuracy, Recall, etc.)
-from src.predict import do_prediction                       # Model-Inferenz (inkl. predict_proba fallback)
-from src.db_con2 import get_ai4i_data                       # DB-Zugriff (Frontend-Daten + Auth-Query)
-from src.simulate_service import SimulationService          # Simulation: schreibt neue Datensätze in DB
-from src.system_service import reset_all_internal           # System-Reset: stoppt Services, setzt Checkpoints, etc.
+from Backend.src.predict_worker import predict_once                 # One-shot Pipeline Step (DB -> preprocess -> predict)
+from Backend.src.predict_service import PredictionService           # Hintergrundservice: ruft predict_once im Intervall auf
+from Backend.src.evaluation_service import evaluate_model_metrics   # Debug Evaluation-Endpunkt (z. B. Accuracy, Recall, etc.)
+from Backend.src.predict import do_prediction                       # Model-Inferenz (inkl. predict_proba fallback)
+from Backend.src.db_con2 import get_ai4i_data                       # DB-Zugriff (Frontend-Daten + Auth-Query)
+from Backend.src.simulate_service import SimulationService          # Simulation: schreibt neue Datensätze in DB
+from Backend.src.system_service import reset_all_internal           # System-Reset: stoppt Services, setzt Checkpoints, etc.
 
 from pathlib import Path
 
@@ -40,7 +39,7 @@ from jose import jwt, JWTError
 from datetime import datetime, timedelta, timezone
 import os
 
-from src.db_con2 import read_dataframe
+from Backend.src.db_con2 import read_dataframe
 
 #zu sicherstellung der env
 load_dotenv(BASE_DIR / ".env")
