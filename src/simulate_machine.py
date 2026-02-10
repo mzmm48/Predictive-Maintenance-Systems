@@ -2,9 +2,13 @@ import asyncio
 import psycopg2
 import pandas as pd
 from datetime import datetime, timezone
+from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parents[1]   # .../backend
+DATA_DIR = BASE_DIR / "data"
 
 # Simulationsdaten laden:
-df_source = pd.read_csv("../data/ai4i2020_sim.csv")
+df_source = pd.read_csv(DATA_DIR / "ai4i2020_sim.csv")
 
 # DB-Insert: schreibt genau eine Sensor-Messung in die Tabelle sensor_readings
 def insert_sensor_reading(conn, row: dict, run_id: str | None = None):

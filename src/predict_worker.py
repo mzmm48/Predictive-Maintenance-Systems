@@ -1,9 +1,9 @@
 from typing import Dict, Any, Optional
 import pandas as pd
 
-from db_con2 import get_last_pred_ts, set_last_pred_ts, fetch_new_ai4i_rows_since
-from preprocessing import preprocess
-from predict import do_prediction
+from src.db_con2 import get_last_pred_ts, set_last_pred_ts, fetch_new_ai4i_rows_since
+from src.preprocessing import preprocess
+from src.predict import do_prediction
 
 # One-shot Prediction-Step: liest Checkpoint, holt neue DB-Daten, preprocesses, führt Inferenz aus und aktualisiert den Checkpoint
 def predict_once(model_name: str = "Random_Forest", batch_size: int = 50, yellow: float = 0.10, red: float = 0.75) -> Dict[str, Any]:

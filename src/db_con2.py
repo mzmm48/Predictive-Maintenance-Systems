@@ -4,12 +4,14 @@ import psycopg2
 import pandas as pd
 from datetime import datetime, timezone
 from pathlib import Path
+BASE_DIR = Path(__file__).resolve().parents[1]   # .../backend
+
 from dotenv import load_dotenv
 
 #Verbindung zur DB
 
 #env laden
-load_dotenv(Path(__file__).resolve().parents[1] / ".env")
+load_dotenv(BASE_DIR / ".env")
 
 def build_conn_str() -> str:
     host = os.getenv("PMS_DB_HOST")

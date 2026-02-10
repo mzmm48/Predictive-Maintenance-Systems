@@ -5,11 +5,14 @@ import time
 from datetime import datetime, timedelta
 import psycopg2
 from pathlib import Path
+BASE_DIR = Path(__file__).resolve().parents[1]   # .../backend
+DATA_DIR = BASE_DIR / "data"
+
 from dotenv import load_dotenv
 import os
 
 #Verbindung zur DB
-load_dotenv(Path(__file__).resolve().parents[1] / ".env")
+load_dotenv(BASE_DIR / ".env")
 
 def build_conn_str() -> str:
     host = os.getenv("PMS_DB_HOST")
@@ -41,7 +44,7 @@ with psycopg2.connect(CONNECTION) as conn:
     count = 0
 
     # CSV lesen: Datei öffnen, Header überspringen, anschließend Zeile für Zeile in die DB inserten
-    with open("../data/ai4i2020_train.csv", "r", encoding="utf-8", newline="") as f:
+    with open(DATA_DIR / "ai4i2020_train.csv", "r", encoding="utf-8", newline="") as f:
         reader = csv.reader(f)
         next(reader, None)  # Header überspringen
 

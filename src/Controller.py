@@ -17,15 +17,19 @@ import pandas as pd                                     # Debug: y_test Handling
 from enum import Enum
 from typing import List, Optional
 
-from predict_worker import predict_once                 # One-shot Pipeline Step (DB -> preprocess -> predict)
-from predict_service import PredictionService           # Hintergrundservice: ruft predict_once im Intervall auf
-from evaluation_service import evaluate_model_metrics   # Debug Evaluation-Endpunkt (z. B. Accuracy, Recall, etc.)
-from predict import do_prediction                       # Model-Inferenz (inkl. predict_proba fallback)
-from db_con2 import get_ai4i_data                       # DB-Zugriff (Frontend-Daten + Auth-Query)
-from simulate_service import SimulationService          # Simulation: schreibt neue Datensätze in DB
-from system_service import reset_all_internal           # System-Reset: stoppt Services, setzt Checkpoints, etc.
+from src.predict_worker import predict_once                 # One-shot Pipeline Step (DB -> preprocess -> predict)
+from src.predict_service import PredictionService           # Hintergrundservice: ruft predict_once im Intervall auf
+from src.evaluation_service import evaluate_model_metrics   # Debug Evaluation-Endpunkt (z. B. Accuracy, Recall, etc.)
+from src.predict import do_prediction                       # Model-Inferenz (inkl. predict_proba fallback)
+from src.db_con2 import get_ai4i_data                       # DB-Zugriff (Frontend-Daten + Auth-Query)
+from src.simulate_service import SimulationService          # Simulation: schreibt neue Datensätze in DB
+from src.system_service import reset_all_internal           # System-Reset: stoppt Services, setzt Checkpoints, etc.
 
 from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parents[1]   # .../backend
+DATA_DIR = BASE_DIR / "data"
+
 from dotenv import load_dotenv
 
 #Für get_data für das Frontend zur erstellen von Grafiken
@@ -36,19 +40,19 @@ from jose import jwt, JWTError
 from datetime import datetime, timedelta, timezone
 import os
 
-from db_con2 import read_dataframe
+from src.db_con2 import read_dataframe
 
 #zu sicherstellung der env
-load_dotenv(Path(__file__).resolve().parents[1] / ".env")
+load_dotenv(BASE_DIR / ".env")
 
 # APP / SERVICES SETUP/ Schemas
 app = FastAPI()
 service = PredictionService()
 # Simulation-Service: schreibt aus CSV schrittweise neue Zeilen in die ai4i2020v2 Tabelle
 sim_service = SimulationService(
-    source_path="../data/ai4i2020_sim.csv",
-    udi_mode="tick",                           # erzeugt eindeutige UDI/IDs für Simulationsdaten
-    udi_offset=10_000_000                      # vermeidung von schon bestehenden UDIs
+    source_path=str(DATA_DIR / "ai4i2020_sim.csv"),
+    udi_mode="tick",
+    udi_offset=10_000_000
 )
 
 # CORS: erlaubt Zugriff vom Frontend
@@ -212,8 +216,8 @@ def get_failure_predictions(model_name: str = "Random_Forest", user=Depends(requ
     try:
         # 1) Artefakte laden
         try:
-            X_test = joblib.load("../data/X_test.joblib")
-            y_test = joblib.load("../data/Y_test.joblib")
+            X_test = joblib.load(DATA_DIR / "X_test.joblib")
+            y_test = joblib.load(DATA_DIR / "Y_test.joblib")
         except FileNotFoundError as e:
             raise HTTPException(
                 status_code=404,

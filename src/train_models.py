@@ -3,7 +3,7 @@ import pickle
 import joblib
 import numpy as np
 import pandas as pd
-from preprocessing import preprocess
+from src.preprocessing import preprocess
 
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegression, LogisticRegressionCV, SGDClassifier
@@ -11,7 +11,12 @@ from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier,
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.neighbors import KNeighborsClassifier
 from imblearn.over_sampling import SMOTE
-from db_con2 import get_training_data
+from src.db_con2 import get_training_data
+from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parents[1]   # .../backend
+DATA_DIR = BASE_DIR / "data"
+MODELS_DIR = DATA_DIR / "models"
 
 
 # Trainingsskript: lädt Rohdaten aus der DB, preprocesses Features, trainiert Modelle (mit SMOTE) und speichert Artefakte/Modelle
@@ -53,15 +58,14 @@ models = {
 }
 
 # 8) Output-Pfad vorbereiten: Modell-Artefakte werden als .pkl unter ../data/models abgelegt
-path = "../data/models"
-os.makedirs(path, exist_ok=True)
+MODELS_DIR.mkdir(parents=True, exist_ok=True)
 
 # Modelltraining + Persistenz: trainiert alle Modelle aus der Registry und speichert pro Modell ein Dict (Model + Featureliste + Version)
 def create_models(X_train, y_train, feature_names):
     for name, model in models.items():
         model.fit(X_train, y_train)
 
-        filename = os.path.join(path, f"{name.replace(' ', '_')}.pkl")
+        filename = MODELS_DIR / f"{name.replace(' ', '_')}.pkl"
         with open(filename, "wb") as f:
             pickle.dump(
                 {
@@ -75,8 +79,8 @@ def create_models(X_train, y_train, feature_names):
 
 
 # Testset als Artefakt gespeichert (für Evaluierung)
-joblib.dump(X_test, "../data/X_test.joblib")
-joblib.dump(y_test, "../data/Y_test.joblib")
+joblib.dump(X_test, DATA_DIR / "X_test.joblib")
+joblib.dump(y_test, DATA_DIR / "Y_test.joblib")
 
 #create_models(X_train_res, y_train_res, feature_names)
 

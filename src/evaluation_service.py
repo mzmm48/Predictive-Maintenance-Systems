@@ -1,6 +1,11 @@
 import pickle
 import joblib
 import numpy as np
+from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parents[1]   # .../backend
+DATA_DIR = BASE_DIR / "data"
+MODELS_DIR = DATA_DIR / "models"
 
 from sklearn.metrics import (
     classification_report,
@@ -15,10 +20,11 @@ from sklearn.metrics import (
 def evaluate_model_metrics(model_name: str = "Random_Forest"):
 
     # Testdaten laden
-    X_test = joblib.load("../data/X_test.joblib")
-    y_test = joblib.load("../data/Y_test.joblib")  # achte auf Dateinamen-Konsistenz!
+    X_test = joblib.load(DATA_DIR / "X_test.joblib")
+    y_test = joblib.load(DATA_DIR / "Y_test.joblib")  # achte auf Dateinamen-Konsistenz!
 
-    with open(f"../data/models/{model_name}.pkl", "rb") as f:
+    model_path = MODELS_DIR / f"{model_name}.pkl"
+    with open(model_path, "rb") as f:
         model_dict = pickle.load(f)
 
     model = model_dict["model"]

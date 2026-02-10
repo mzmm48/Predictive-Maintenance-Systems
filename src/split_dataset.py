@@ -6,10 +6,14 @@
 
 import pandas as pd
 from sklearn.model_selection import train_test_split
+from pathlib import Path
 
-INPUT_PATH = "../data/ai4i2020.csv"
-TRAIN_PATH = "../data/ai4i2020_train.csv"
-SIM_PATH = "../data/ai4i2020_sim.csv"
+BASE_DIR = Path(__file__).resolve().parents[1]   # .../backend
+DATA_DIR = BASE_DIR / "data"
+
+INPUT_PATH = DATA_DIR / "ai4i2020.csv"
+TRAIN_PATH = DATA_DIR / "ai4i2020_train.csv"
+SIM_PATH   = DATA_DIR / "ai4i2020_sim.csv"
 
 #Trennt Originale CSV in Train und Sim Daten
 def split_csv_stratified():

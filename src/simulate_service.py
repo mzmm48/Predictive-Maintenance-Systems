@@ -3,15 +3,19 @@ import time
 from typing import Optional, Dict, Any
 from datetime import timedelta
 import pandas as pd
+from pathlib import Path
 
-from db_con2 import get_max_ts_ai4i, insert_ai4i_row, delete_ai4i_rows_since
+BASE_DIR = Path(__file__).resolve().parents[1]   # .../backend
+DATA_DIR = BASE_DIR / "data"
+
+from src.db_con2 import get_max_ts_ai4i, insert_ai4i_row, delete_ai4i_rows_since
 
 # Simulation-Service: streamt CSV-Zeilen als "neue" Sensordaten in die DB (mit monoton steigender TS-Logik)
 class SimulationService:
     # Initialisierung: lädt CSV-Quelle, setzt Default-Parameter und initialisiert Thread-/Zustandsvariablen
     def __init__(
         self,
-        source_path: str = "../data/ai4i2020_sim.csv",
+        source_path: str | Path = DATA_DIR / "ai4i2020_sim.csv",
         udi_mode: str = "keep",          # "keep" | "offset" | "tick"
         udi_offset: int = 10_000_000,    # nur relevant bei udi_mode="offset"
     ):
@@ -21,7 +25,7 @@ class SimulationService:
         self._interval: float = 1.0
         self._running: bool = False
 
-        self._df_source = pd.read_csv(source_path)
+        self._df_source = pd.read_csv(Path(source_path))
         if self._df_source.empty:
             raise ValueError(f"Simulation CSV ist leer: {source_path}")
 

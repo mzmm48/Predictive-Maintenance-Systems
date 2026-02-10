@@ -1,4 +1,3 @@
-# TODO wird von Test/Main aufgerufen
 import pickle
 import numpy as np
 import pandas as pd
@@ -7,10 +6,15 @@ from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay, roc_auc_sc
 import matplotlib.pyplot as plt
 import matplotlib
 matplotlib.use('TkAgg')
+from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parents[1]   # .../backend
+MODELS_DIR = BASE_DIR / "data" / "models"
 
 # Inferenz-Helper: lädt ein gespeichertes Modell, richtet Features aus und liefert Prediction + (falls möglich) Probabilities zurück
 def do_prediction(x_test, y_test=None, model_name: str = "Random_Forest"):
-    with open(f"../data/models/{model_name}.pkl", "rb") as f:
+    model_path = MODELS_DIR / f"{model_name}.pkl"
+    with open(model_path, "rb") as f:
         model_dict = pickle.load(f)
 
     model = model_dict['model']

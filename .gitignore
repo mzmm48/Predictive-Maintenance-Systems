@@ -183,3 +183,4 @@ cython_debug/
 #eigene ignores
 .idea/
 src/.DS_Store
+requirements_full.txt
