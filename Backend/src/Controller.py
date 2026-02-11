@@ -38,6 +38,7 @@ from pydantic import BaseModel
 from jose import jwt, JWTError
 from datetime import datetime, timedelta, timezone
 import os
+import secrets
 
 from Backend.src.db_con2 import read_dataframe
 
@@ -63,24 +64,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Minimaler CSRF-Schutz via Origin-Check (state-changing Requests)
-ALLOWED_ORIGINS = {
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-    "http://localhost:8000",
-    "http://127.0.0.1:8000",
-}
-
-@app.middleware("http")
-async def csrf_origin_check(request: Request, call_next):
-    if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
-        origin = request.headers.get("origin")
-        if origin and origin not in ALLOWED_ORIGINS:
-            return JSONResponse(status_code=403, content={"detail": "CSRF blocked (bad origin)"})
-    return await call_next(request)
-
 # Enum: Erlaubte Spaltennamen
 class ColumnName(str, Enum):
     torque = "Torque [Nm]"
@@ -105,10 +88,58 @@ class ModelName(str, Enum):
 
 
 # Auth (JWT in HttpOnly Cookie) - nutzt Tabelle "anmeldung"
-JWT_SECRET = os.getenv("PMS_JWT_SECRET", "dev-secret-change-me")
+PMS_ENV = os.getenv("PMS_ENV", "dev")
+_jwt_secret_env = os.getenv("PMS_JWT_SECRET")
+JWT_SECRET = _jwt_secret_env or "dev-secret-change-me"
 JWT_ALG = "HS256"
 COOKIE_NAME = "pms_access_token"
 TOKEN_TTL_MINUTES = 8 * 60  # 8 Stunden
+
+# Enforce secret in non-dev environments
+if PMS_ENV != "dev" and (not _jwt_secret_env or _jwt_secret_env == "dev-secret-change-me"):
+    raise RuntimeError(
+        "PMS_JWT_SECRET must be set to a strong value when PMS_ENV is not 'dev'."
+    )
+
+def _env_bool(name: str, default: bool = False) -> bool:
+    val = os.getenv(name)
+    if val is None:
+        return default
+    return val.strip().lower() in {"1", "true", "yes", "y", "on"}
+
+COOKIE_SECURE = _env_bool("PMS_COOKIE_SECURE", default=False)
+COOKIE_SAMESITE = os.getenv("PMS_COOKIE_SAMESITE", "lax")
+try:
+    COOKIE_MAX_AGE_SECONDS = int(
+        os.getenv("PMS_COOKIE_MAX_AGE_SECONDS", str(TOKEN_TTL_MINUTES * 60))
+    )
+except ValueError:
+    COOKIE_MAX_AGE_SECONDS = TOKEN_TTL_MINUTES * 60
+
+CSRF_COOKIE_NAME = "pms_csrf"
+CSRF_HEADER_NAME = "X-CSRF-Token"
+
+def _set_csrf_cookie(response: Response, token: str) -> None:
+    response.set_cookie(
+        key=CSRF_COOKIE_NAME,
+        value=token,
+        httponly=False,
+        secure=COOKIE_SECURE,
+        samesite="lax",
+        max_age=COOKIE_MAX_AGE_SECONDS,
+        path="/",
+    )
+
+@app.middleware("http")
+async def csrf_double_submit(request: Request, call_next):
+    if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
+        path = request.url.path
+        if path not in {"/auth/login", "/auth/logout"}:
+            cookie_token = request.cookies.get(CSRF_COOKIE_NAME)
+            header_token = request.headers.get(CSRF_HEADER_NAME)
+            if not cookie_token or not header_token or cookie_token != header_token:
+                return JSONResponse(status_code=403, content={"detail": "CSRF validation failed"})
+    return await call_next(request)
 
 class LoginRequest(BaseModel):
     username: str
@@ -163,6 +194,7 @@ def auth_login(req: LoginRequest, response: Response):
     row = df.iloc[0].to_dict()
 
     # Passwort ist bei euch Klartext in der DB -> Klartextvergleich
+    # Passwort ist bei euch Klartext in der DB -> Klartextvergleich
     if req.password != str(row.get("Passwort", "")):
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
@@ -173,11 +205,13 @@ def auth_login(req: LoginRequest, response: Response):
         key=COOKIE_NAME,
         value=token,
         httponly=True,
-        secure=False,     # lokal ok; prod: True + HTTPS
-        samesite="lax",
-        max_age=TOKEN_TTL_MINUTES * 60,
+        secure=COOKIE_SECURE,     # lokal ok; prod: True + HTTPS
+        samesite=COOKIE_SAMESITE,
+        max_age=COOKIE_MAX_AGE_SECONDS,
         path="/",
     )
+    csrf_token = secrets.token_urlsafe(32)
+    _set_csrf_cookie(response, csrf_token)
 
     return {
         "ok": True,
@@ -189,15 +223,18 @@ def auth_login(req: LoginRequest, response: Response):
     }
 
 @app.get("/auth/me")
-def auth_me(request: Request):
+def auth_me(request: Request, response: Response):
     user = read_user_from_cookie(request)
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated")
+    if not request.cookies.get(CSRF_COOKIE_NAME):
+        _set_csrf_cookie(response, secrets.token_urlsafe(32))
     return {"ok": True, **user}
 
 @app.post("/auth/logout")
 def auth_logout(response: Response):
     response.delete_cookie(key=COOKIE_NAME, path="/")
+    response.delete_cookie(key=CSRF_COOKIE_NAME, path="/")
     return {"ok": True}
 
 # Debug / DEV
