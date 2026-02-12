@@ -200,7 +200,6 @@ def require_user(request: Request):
         raise HTTPException(status_code=401, detail="Not authenticated")
     return user
 
-#Brauch ich das wirklich?
 def require_admin(user=Depends(require_user)):
     if str(user.get("role", "")).lower() != "admin":
         raise HTTPException(status_code=403, detail="Forbidden")
