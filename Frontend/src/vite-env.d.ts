@@ -2,7 +2,7 @@
 
 interface ImportMetaEnv {
   readonly VITE_API_BASE_URL: string;
-  // hier kannst du später weitere VITE_* Variablen eintragen
+  // Optional: declare additional VITE_* variables here for TypeScript.
   // readonly VITE_SOMETHING_ELSE: string;
 }
 

@@ -1,5 +1,12 @@
-import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
-import { api, ApiError } from "../api/client";
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+import { api } from "../api/client";
 
 type User = {
   username: string;
@@ -17,62 +24,66 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
+/**
+ * Auth state backed by the backend's HttpOnly cookie session.
+ * On app start we call `/auth/me` to restore an existing session (if any).
+ */
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   const isAuthenticated = !!user;
 
-  const refreshSession = async () => {
+  const refreshSession = useCallback(async () => {
     try {
       const me = await api.auth.me();
       setUser({ username: me.username, role: me.role });
-    } catch (err) {
-      // 401 => nicht eingeloggt
+    } catch {
+      // If `/auth/me` fails we treat the user as logged out.
       setUser(null);
     } finally {
       setIsLoading(false);
     }
-  };
-
-  useEffect(() => {
-    // Beim App-Start Session prüfen
-    refreshSession();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const login = async (username: string, password: string) => {
+  useEffect(() => {
+    // On app start, try to restore an existing session.
+    void refreshSession();
+  }, [refreshSession]);
+
+  const login = useCallback(async (username: string, password: string) => {
     setIsLoading(true);
     try {
       await api.auth.login(username, password);
-      // Nach Login /auth/me ziehen, damit wir User/Role sicher haben
+      // After login fetch `/auth/me` to get username/role from the server.
       const me = await api.auth.me();
       setUser({ username: me.username, role: me.role });
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
-  const logout = async () => {
+  const logout = useCallback(async () => {
     setIsLoading(true);
     try {
       await api.auth.logout();
     } catch {
-      // selbst wenn logout-call fehlschlägt, state resetten
+      // Even if the logout call fails, we still clear local state.
     } finally {
       setUser(null);
       setIsLoading(false);
     }
-  };
+  }, []);
 
   const value = useMemo<AuthContextValue>(
     () => ({ user, isAuthenticated, isLoading, login, logout, refreshSession }),
-    [user, isAuthenticated, isLoading]
+    [user, isAuthenticated, isLoading, login, logout, refreshSession]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
+/** Access the current auth/session state. */
 export function useAuth() {
   const ctx = useContext(AuthContext);
   if (!ctx) throw new Error("useAuth must be used within AuthProvider");

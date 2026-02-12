@@ -12,7 +12,8 @@ from dotenv import load_dotenv
 import os
 
 #Verbindung zur DB
-load_dotenv(BASE_DIR / ".env")
+_env_path = BASE_DIR / ".env"
+load_dotenv(_env_path)
 
 def build_conn_str() -> str:
     host = os.getenv("PMS_DB_HOST")

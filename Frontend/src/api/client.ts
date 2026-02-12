@@ -1,9 +1,21 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
+const DEFAULT_API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
+const API_BASE_STORAGE_KEY = "pms.settings.apiBase";
 
+function getApiBaseUrl(): string {
+  if (typeof window === "undefined") return DEFAULT_API_BASE_URL;
+  try {
+    const stored = window.localStorage.getItem(API_BASE_STORAGE_KEY);
+    return stored && stored.trim() ? stored.trim() : DEFAULT_API_BASE_URL;
+  } catch {
+    return DEFAULT_API_BASE_URL;
+  }
+}
 
+/** Error with HTTP status and response body (useful for UI error messages). */
 export class ApiError extends Error {
-  status: number;
-  bodyText: string;
+  readonly status: number;
+  readonly bodyText: string;
 
   constructor(status: number, bodyText: string) {
     super(`API error ${status}: ${bodyText}`);
@@ -12,23 +24,30 @@ export class ApiError extends Error {
   }
 }
 
-const getCookieValue = (name: string): string | null => {
+function getCookieValue(name: string): string | null {
   if (typeof document === "undefined") return null;
   const match = document.cookie
     .split("; ")
     .find((row) => row.startsWith(`${name}=`));
   if (!match) return null;
   return decodeURIComponent(match.split("=").slice(1).join("=")) || null;
-};
+}
 
+/**
+ * Minimal fetch wrapper used by the whole frontend.
+ * - Always sends cookies (`credentials: "include"`) for the HttpOnly session cookie.
+ * - Adds the CSRF token header for mutating requests (double-submit cookie pattern).
+ * @param path API path (e.g. `/auth/me`)
+ * @param options `fetch` options (method, headers, body, ...)
+ */
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const method = String(options.method ?? "GET").toUpperCase();
   const isMutating = ["POST", "PUT", "PATCH", "DELETE"].includes(method);
   const csrfToken = isMutating ? getCookieValue("pms_csrf") : null;
 
-  const res = await fetch(`${API_BASE_URL}${path}`, {
+  const res = await fetch(`${getApiBaseUrl()}${path}`, {
     ...options,
-    credentials: "include", // ✅ wichtig für HttpOnly Cookie Session
+    credentials: "include",
     headers: {
       "Content-Type": "application/json",
       ...(isMutating && csrfToken ? { "X-CSRF-Token": csrfToken } : {}),
@@ -39,7 +58,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   if (!res.ok) {
     const text = await res.text().catch(() => "");
 
-    // ✅ globaler Hook: bei 401 UI automatisch zum Login
+    // Global hook: if the session is invalid, redirect UI to login.
     if (res.status === 401) {
       window.dispatchEvent(new CustomEvent("auth:unauthorized"));
     }
@@ -47,7 +66,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     throw new ApiError(res.status, text || res.statusText);
   }
 
-  // 204 -> kein Body
+  // 204 (No Content) -> no JSON body to parse
   if (res.status === 204) return undefined as T;
 
   const text = await res.text();
@@ -56,12 +75,12 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   try {
     return JSON.parse(text) as T;
   } catch {
-    // falls doch mal plain-text zurückkommt
+    // Some endpoints might return plain text.
     return text as unknown as T;
   }
 }
 
-// ----- Typen (Frontend) -----
+// ----- Types -----
 
 export type ColumnName =
   | "Torque [Nm]"

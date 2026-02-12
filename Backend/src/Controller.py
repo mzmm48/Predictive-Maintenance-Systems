@@ -37,13 +37,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from jose import jwt, JWTError
 from datetime import datetime, timedelta, timezone
+from urllib.parse import urlparse
 import os
 import secrets
+import psycopg2
 
 from Backend.src.db_con2 import read_dataframe
 
 #zu sicherstellung der env
-load_dotenv(BASE_DIR / ".env")
+load_dotenv( BASE_DIR / ".env" )
 
 # APP / SERVICES SETUP/ Schemas
 app = FastAPI()
@@ -63,6 +65,16 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Damit Frontend bei DB-/Config-Fehlern keinen "CORS/Network Error" bekommt,
+# sondern eine saubere JSON-Antwort inkl. CORS-Header.
+@app.exception_handler(psycopg2.Error)
+async def _handle_psycopg2_error(_: Request, exc: psycopg2.Error):
+    return JSONResponse(status_code=503, content={"detail": f"Database error: {exc.__class__.__name__}"})
+
+@app.exception_handler(RuntimeError)
+async def _handle_runtime_error(_: Request, exc: RuntimeError):
+    return JSONResponse(status_code=500, content={"detail": str(exc)})
 
 # Enum: Erlaubte Spaltennamen
 class ColumnName(str, Enum):
@@ -118,6 +130,20 @@ except ValueError:
 
 CSRF_COOKIE_NAME = "pms_csrf"
 CSRF_HEADER_NAME = "X-CSRF-Token"
+SWAGGER_CSRF_BYPASS = _env_bool(
+    "PMS_SWAGGER_CSRF_BYPASS",
+    default=PMS_ENV in {"dev", "local"},
+)
+
+def _is_swagger_ui_request(request: Request) -> bool:
+    referer = request.headers.get("referer")
+    if not referer:
+        return False
+    try:
+        ref_path = urlparse(referer).path or ""
+    except Exception:
+        return False
+    return ref_path.startswith("/docs") or ref_path.startswith("/redoc")
 
 def _set_csrf_cookie(response: Response, token: str) -> None:
     response.set_cookie(
@@ -135,6 +161,8 @@ async def csrf_double_submit(request: Request, call_next):
     if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
         path = request.url.path
         if path not in {"/auth/login", "/auth/logout"}:
+            if SWAGGER_CSRF_BYPASS and _is_swagger_ui_request(request):
+                return await call_next(request)
             cookie_token = request.cookies.get(CSRF_COOKIE_NAME)
             header_token = request.headers.get(CSRF_HEADER_NAME)
             if not cookie_token or not header_token or cookie_token != header_token:

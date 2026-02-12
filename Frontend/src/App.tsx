@@ -9,6 +9,7 @@ import { ModelInsightsPage } from "./pages/ModelInsightsPage";
 
 import { ProtectedLayout } from "./components/ProtectedLayout";
 
+/** App-level routes (public `/login` + protected dashboard pages). */
 export default function App() {
   return (
     <BrowserRouter>

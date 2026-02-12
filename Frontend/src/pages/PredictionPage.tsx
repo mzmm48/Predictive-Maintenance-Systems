@@ -43,8 +43,9 @@ type DataRow = {
   [key: string]: unknown;
 };
 
+/** Prediction UI: control simulation + prediction service, and run one-shot predictions. */
 export function PredictionPage() {
-  // ====== Prediction Service State ======
+  // Prediction service state
   const [running, setRunning] = useState(false);
   const {
     predictionConfig,
@@ -61,21 +62,21 @@ export function PredictionPage() {
   const [statusError, setStatusError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  // ====== Simulation State (für euren Datenfluss) ======
+  // Simulation state
   const [simRunning, setSimRunning] = useState<boolean>(false);
   const [simBusy, setSimBusy] = useState<boolean>(false);
   const [simError, setSimError] = useState<string | null>(null);
 
-  // ====== UI / Mockup-like Blocks (wie Kommilitonin) ======
+  // UI state
   const [isPredicting, setIsPredicting] = useState(false);
   const [showResults, setShowResults] = useState(false);
 
-  // ====== Batch ======
+  // Batch preview
   const [batchLoading, setBatchLoading] = useState(false);
   const [batchInfo, setBatchInfo] = useState<{ rows: number; features: number } | null>(null);
   const [batchRows, setBatchRows] = useState<BatchRow[]>([]);
 
-  // ====== Results ======
+  // Prediction results
   const [results, setResults] = useState<ResultRow[]>([]);
   const [failureTypeLabel, setFailureTypeLabel] = useState<string | null>(null);
   const failureTypeLabelRef = useRef<string | null>(null);
@@ -103,7 +104,7 @@ export function PredictionPage() {
     predictionConfigMetaRef.current = predictionConfigMeta;
   }, [predictionConfigMeta]);
 
-  // ---------- Helpers ----------
+  // Helpers
   const prettyModelLabel = (m: string) => {
     const map: Record<string, string> = {
       Random_Forest: "Random Forest",
@@ -133,6 +134,22 @@ export function PredictionPage() {
       return Math.max(0, Math.min(1, normalized));
     }
     return null;
+  };
+
+  // UI threshold for "high risk" styling (stored in settings, defaults to 0.50).
+  const getUiThreshold = (): number => {
+    const fallback = 0.5;
+    if (typeof window === "undefined") return fallback;
+    try {
+      const raw = window.localStorage.getItem("pms.settings.threshold");
+      if (!raw) return fallback;
+      const n = Number(raw.replace(",", ".").trim());
+      if (!Number.isFinite(n)) return fallback;
+      const normalized = n > 1 ? n / 100 : n;
+      return Math.max(0, Math.min(1, normalized));
+    } catch {
+      return fallback;
+    }
   };
 
   const parseUdi = (value: unknown): number | null => {
@@ -363,7 +380,7 @@ export function PredictionPage() {
     }
   };
 
-  // "Predict Once" (wie bisher) + in Kommilitonin-Flow integriert
+  // Run a single prediction once, then fetch the latest record for UI display.
   const onPredictOnce = async () => {
     setIsPredicting(true);
     setBusy(true);
@@ -413,7 +430,7 @@ export function PredictionPage() {
         {
           product: String(latestRecord?.product_id ?? latestRecord?.id ?? "Batch"),
           mode,
-          probability: p === null ? "-" : `${(p * 100).toFixed(1)}%`,
+          probability: p === null ? "—" : `${(p * 100).toFixed(1)}%`,
           explanation,
           recommendation,
         },
@@ -504,9 +521,10 @@ export function PredictionPage() {
     }
   };
 
+  const uiThresholdPct = getUiThreshold() * 100;
+
   return (
     <div className="space-y-6">
-      {/* Header (wie Kommilitonin) */}
       <div className="p-6 rounded-[14px] shadow-lg" style={cardStyle}>
         <h1 className="mb-2" style={{ color: "#e5e7eb", fontSize: "1.5rem" }}>
           Vorhersage
@@ -524,7 +542,6 @@ export function PredictionPage() {
         )}
       </div>
 
-            {/* Live KPIs (3 Boxen nebeneinander – unabhängig von Tailwind) */}
       <div
         style={{
           display: "grid",
@@ -533,7 +550,6 @@ export function PredictionPage() {
           alignItems: "stretch",
         }}
       >
-        {/* Running */}
         <div
           className="p-5 rounded-[14px] shadow-lg"
           style={{
@@ -560,13 +576,11 @@ export function PredictionPage() {
             {running ? "Yes" : "No"}
           </p>
 
-          {/* optionaler Subtext – wenn du willst kannst du ihn auch komplett löschen */}
           <p style={{ color: "#9ca3af", fontSize: "0.75rem", marginTop: "0.5rem", textAlign: "center" }}>
             Prediction-Service
           </p>
         </div>
 
-        {/* Traffic Light */}
         <div
           className="p-5 rounded-[14px] shadow-lg"
           style={{
@@ -594,13 +608,11 @@ export function PredictionPage() {
             {tl}
           </p>
 
-          {/* optionaler Subtext */}
           <p style={{ color: "#9ca3af", fontSize: "0.75rem", marginTop: "0.5rem", textAlign: "center" }}>
             Letzter Status
           </p>
         </div>
 
-        {/* Failure Probability */}
         <div
           className="p-5 rounded-[14px] shadow-lg"
           style={{
@@ -627,14 +639,12 @@ export function PredictionPage() {
             {probText}
           </p>
 
-          {/* optionaler Subtext */}
           <p style={{ color: "#9ca3af", fontSize: "0.75rem", marginTop: "0.5rem", textAlign: "center" }}>
             Letzter Score
           </p>
         </div>
       </div>
 
-      {/* Model Selection (Kommilitonin-Design, aber Backend-Values!) */}
       <div className="p-6 rounded-[14px] shadow-lg" style={cardStyle}>
         <h2 className="mb-4" style={{ color: "#e5e7eb", fontSize: "1.125rem" }}>
           Modell wählen
@@ -688,7 +698,6 @@ export function PredictionPage() {
         </p>
       </div>
 
-      {/* Data Source (Kommilitonin-Block, jetzt echt: DB-Batch laden) */}
       <div className="p-6 rounded-[14px] shadow-lg" style={cardStyle}>
         <h2 className="mb-4" style={{ color: "#e5e7eb", fontSize: "1.125rem" }}>
           Batch-Daten laden
@@ -732,7 +741,6 @@ export function PredictionPage() {
         )}
       </div>
 
-      {/* Batch Preview (wie Kommilitonin) */}
       <div className="p-6 rounded-[14px] shadow-lg" style={cardStyle}>
         <h2 className="mb-4" style={{ color: "#e5e7eb", fontSize: "1.125rem" }}>
           Batch-Vorschau
@@ -805,7 +813,6 @@ export function PredictionPage() {
         </div>
       </div>
 
-      {/* Konfiguration (eure echte Steuerung, aber im Kommilitonin-Design) */}
       <div className="p-6 rounded-[14px] shadow-lg" style={cardStyle}>
         <h2 className="mb-4" style={{ color: "#e5e7eb", fontSize: "1.125rem" }}>
           Konfiguration
@@ -853,7 +860,6 @@ export function PredictionPage() {
           </div>
         </div>
 
-        {/* Simulation Controls (damit /predict/latest überhaupt Werte bekommt) */}
         <div className="mt-5 grid grid-cols-2 gap-3">
           <button
             onClick={onStartSimulation}
@@ -890,7 +896,6 @@ export function PredictionPage() {
           </button>
         </div>
 
-        {/* Prediction service controls (wie vorher, nur passend gestylt) */}
         <div className="mt-4 grid grid-cols-2 gap-3">
           <button
             disabled={busy}
@@ -926,7 +931,6 @@ export function PredictionPage() {
         </div>
       </div>
 
-      {/* Big Predict Button (Kommilitonin), nutzt intern eure echte predictOnce */}
       <button
         onClick={onPredictOnce}
         disabled={isPredicting || busy}
@@ -955,7 +959,6 @@ export function PredictionPage() {
         )}
       </button>
 
-      {/* Results (Kommilitonin) */}
       {showResults && (
         <div className="p-6 rounded-[14px] shadow-lg" style={cardStyle}>
           <div className="flex items-center justify-between mb-4">
@@ -1027,11 +1030,11 @@ export function PredictionPage() {
                           className="px-2 py-1 rounded"
                           style={{
                             background:
-                              r.probability !== "—" && parseFloat(r.probability) >= 50
+                              r.probability !== "—" && parseFloat(r.probability) >= uiThresholdPct
                                 ? "rgba(239, 68, 68, 0.2)"
                                 : "rgba(34, 211, 238, 0.2)",
                             color:
-                              r.probability !== "—" && parseFloat(r.probability) >= 50 ? "#ef4444" : "#22d3ee",
+                              r.probability !== "—" && parseFloat(r.probability) >= uiThresholdPct ? "#ef4444" : "#22d3ee",
                             fontSize: "0.75rem",
                           }}
                         >

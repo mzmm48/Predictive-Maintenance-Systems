@@ -1,10 +1,8 @@
 import { Link, useLocation } from "react-router-dom";
 import { LayoutDashboard, Brain, Upload, Settings } from "lucide-react";
-import { useAuth } from "../context/AuthContext";
 
 export function Sidebar() {
   const location = useLocation();
-  const auth = useAuth();
 
   const menuItems = [
     { label: "Dashboard", path: "/dashboard", icon: LayoutDashboard },
@@ -13,18 +11,11 @@ export function Sidebar() {
     { label: "Einstellungen", path: "/einstellungen", icon: Settings },
   ];
 
-  const statusText = auth.isLoading
-    ? "Session wird geprüft…"
-    : auth.user
-      ? `${auth.user.username}${auth.user.role ? ` (${auth.user.role})` : ""}`
-      : "Nicht angemeldet";
-
   return (
     <aside
       className="w-60 min-h-screen px-4 py-6 flex flex-col"
       style={{ background: "linear-gradient(180deg, #f6f4ec 0%, #f0f2f4 100%)" }}
     >
-      {/* Menü */}
       <div className="mb-8">
         <h3
           className="px-3 mb-3 uppercase tracking-wider"
@@ -33,7 +24,7 @@ export function Sidebar() {
           Menü
         </h3>
 
-        <nav className="space-y-1">
+        <nav className="space-y-1" aria-label="Hauptnavigation">
           {menuItems.map((item) => {
             const isActive = location.pathname === item.path;
             const Icon = item.icon;
@@ -54,7 +45,6 @@ export function Sidebar() {
           })}
         </nav>
       </div>
-
     </aside>
   );
 }

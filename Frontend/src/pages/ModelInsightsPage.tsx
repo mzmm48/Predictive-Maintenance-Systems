@@ -13,8 +13,8 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import { api, type EvaluateModelResponse } from "../api/client";
 
+/** Model evaluation dashboard (metrics, ROC curve, feature importances). */
 export function ModelInsightsPage() {
-  // --- Modell-Auswahl (wie bei dir, passend zu Backend ModelName Enum) ---
   const modelOptions = useMemo(
     () => [
       { label: "Random Forest", value: "Random_Forest" },
@@ -60,7 +60,7 @@ export function ModelInsightsPage() {
     roc_auc: null,
   });
   const optionStyle = { color: "#111827", background: "#f3f4f6" };
-  // --- Load metrics from Backend: GET /evaluate_model?model_name=... ---
+  // Load metrics from backend whenever the selected model changes.
   useEffect(() => {
     let alive = true;
 
@@ -99,7 +99,7 @@ export function ModelInsightsPage() {
 
     load();
 
-    // Optional: live refresh (wie Kommilitonin-Style), aber sanft:
+    // Optional: leichter Live-Refresh (Demo), damit die UI aktuell bleibt.
     const id = setInterval(load, 10000);
 
     return () => {
@@ -109,7 +109,7 @@ export function ModelInsightsPage() {
   }, [selectedModel]);
 
   const fmtPct = (v: number | null) =>
-    typeof v === "number" ? `${Math.round(v * 100)}%` : "—";
+    typeof v === "number" ? `${Math.round(v * 100)}%` : "â€”";
 
   const fmtAuc = (v: number | null) =>
     typeof v === "number" ? v.toFixed(2) : "_";
@@ -142,7 +142,6 @@ export function ModelInsightsPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header (wie bei Kommilitonin) + Modell-Auswahl rechts */}
       <div
         className="p-6 rounded-[14px] shadow-lg"
         style={{
@@ -162,7 +161,7 @@ export function ModelInsightsPage() {
 
           <div style={{ minWidth: 280 }}>
             <p style={{ color: "#9ca3af", fontSize: "0.75rem", marginBottom: 6 }}>
-              Modell auswählen
+              Modell auswÃ¤hlen
             </p>
             <select
               value={selectedModel}
@@ -191,7 +190,6 @@ export function ModelInsightsPage() {
         )}
       </div>
 
-      {/* Modell-Basisinformationen (wie Kommilitonin) */}
       <div
         className="p-6 rounded-[14px] shadow-lg"
         style={{ background: "#232421", boxShadow: "0 4px 24px rgba(0, 0, 0, 0.1)" }}
@@ -225,7 +223,6 @@ export function ModelInsightsPage() {
         </div>
       </div>
 
-      {/* KPI Row (wie Kommilitonin: 4 KPIs) */}
       <div className="grid grid-cols-4 gap-4">
         {[
           { label: "Accuracy", value: loading ? "Loading..." : fmtPct(metrics.accuracy), sub: "Testdaten" },
@@ -245,7 +242,6 @@ export function ModelInsightsPage() {
         ))}
       </div>
 
-      {/* Confusion Matrix + Derived KPIs */}
       <div className="grid grid-cols-2 gap-4">
         <div
           className="p-6 rounded-[14px] shadow-lg"
@@ -312,7 +308,7 @@ export function ModelInsightsPage() {
               Specificity (TNR)
             </p>
             <p style={{ color: "#e5e7eb", fontSize: "1.625rem", fontWeight: 600 }}>
-              {specificity !== null ? `${Math.round(specificity * 100)}%` : "â€”"}
+              {specificity !== null ? `${Math.round(specificity * 100)}%` : "Ã¢â‚¬â€"}
             </p>
             <p style={{ color: "#9ca3af", fontSize: "0.75rem" }}>
               TN / (TN + FP)
@@ -326,7 +322,7 @@ export function ModelInsightsPage() {
               False Alarm Rate (FPR)
             </p>
             <p style={{ color: "#e5e7eb", fontSize: "1.625rem", fontWeight: 600 }}>
-              {falseAlarmRate !== null ? `${Math.round(falseAlarmRate * 100)}%` : "â€”"}
+              {falseAlarmRate !== null ? `${Math.round(falseAlarmRate * 100)}%` : "Ã¢â‚¬â€"}
             </p>
             <p style={{ color: "#9ca3af", fontSize: "0.75rem" }}>
               FP / (FP + TN)
@@ -335,9 +331,7 @@ export function ModelInsightsPage() {
         </div>
       </div>
 
-      {/* ROC + Feature Importances */}
       <div className="grid grid-cols-2 gap-4">
-        {/* ROC Curve */}
         <div
           className="p-6 rounded-[14px] shadow-lg"
           style={{ background: "#232421", boxShadow: "0 4px 24px rgba(0, 0, 0, 0.1)" }}
@@ -382,12 +376,10 @@ export function ModelInsightsPage() {
             </ResponsiveContainer>
           ) : (
             <div className="p-4 rounded-lg" style={{ background: "rgba(156,163,175,0.10)" }}>
-              <p style={{ color: "#9ca3af", fontSize: "0.875rem" }}>ROC-Punkte nicht verf?gbar</p>
+              <p style={{ color: "#9ca3af", fontSize: "0.875rem" }}>ROC-Punkte nicht verfuegbar</p>
             </div>
           )}
         </div>
-
-        {/* Feature Importances */}
         <div
           className="p-6 rounded-[14px] shadow-lg"
           style={{ background: "#232421", boxShadow: "0 4px 24px rgba(0, 0, 0, 0.1)" }}
@@ -412,29 +404,16 @@ export function ModelInsightsPage() {
             </ResponsiveContainer>
           ) : (
             <div className="p-4 rounded-lg" style={{ background: "rgba(156,163,175,0.10)" }}>
-              <p style={{ color: "#9ca3af", fontSize: "0.875rem" }}>Feature Importances nicht verf?gbar</p>
+              <p style={{ color: "#9ca3af", fontSize: "0.875rem" }}>Feature Importances nicht verfuegbar</p>
             </div>
           )}
         </div>
       </div>
-
-      {evalResult?.classification_report && (
-        <details
-          className="p-6 rounded-[14px] shadow-lg"
-          style={{ background: "#232421", boxShadow: "0 4px 24px rgba(0, 0, 0, 0.1)" }}
-        >
-          <summary style={{ color: "#e5e7eb", fontSize: "1.125rem", cursor: "pointer" }}>
-            Details (Classification Report)
-          </summary>
-          <pre style={{ color: "#9ca3af", fontSize: "0.8rem", marginTop: 12, whiteSpace: "pre-wrap" }}>
-            {evalResult.classification_report}
-          </pre>
-        </details>
-      )}
       <footer className="pt-8 pb-6 text-center" style={{ color: "#9ca3af", fontSize: "0.75rem" }}>
-        © 2025 – Projekt 2 • Predictive Analysis for Maintenance
+        Â© 2025 â€“ Projekt 2 â€¢ Predictive Analysis for Maintenance
       </footer>
     </div>
   );
 }
+
 

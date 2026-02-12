@@ -1,17 +1,19 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { ApiError } from '../api/client';
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { ApiError } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 
+/** Public login page. Creates a backend session (HttpOnly cookie) on success. */
 export function LoginPage() {
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const navigate = useNavigate();
   const auth = useAuth();
 
+  // Validate fields, call backend login, then route into the protected area.
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
@@ -29,6 +31,7 @@ export function LoginPage() {
     } catch (err) {
       if (err instanceof ApiError) {
         if (err.status === 401) setErrorMsg("Falsche Zugangsdaten.");
+        else if (err.status === 503) setErrorMsg("Backend/Datenbank nicht erreichbar (Docker gestartet?).");
         else if (err.status === 404) setErrorMsg("Login-Endpoint nicht vorhanden (Backend noch ohne /auth/login).");
         else setErrorMsg(`Login fehlgeschlagen (HTTP ${err.status}).`);
       } else {
@@ -45,9 +48,8 @@ export function LoginPage() {
       className="min-h-screen flex items-center justify-center relative overflow-hidden"
       style={{ background: '#f6f4ec' }}
     >
-      {/* Radial glow effects in background */}
-      <div className="absolute top-0 left-1/4 w-96 h-96 bg-yellow-200/20 rounded-full blur-3xl"></div>
-      <div className="absolute top-0 right-1/4 w-96 h-96 bg-green-200/20 rounded-full blur-3xl"></div>
+      <div className="absolute top-0 left-1/4 w-96 h-96 bg-yellow-200/20 rounded-full blur-3xl" />
+      <div className="absolute top-0 right-1/4 w-96 h-96 bg-green-200/20 rounded-full blur-3xl" />
 
       <div
         className="relative w-full max-w-md p-8 rounded-[14px] shadow-lg"
@@ -56,7 +58,6 @@ export function LoginPage() {
           boxShadow: '0 4px 24px rgba(0, 0, 0, 0.2)'
         }}
       >
-        {/* Logo */}
         <div className="flex items-center justify-center gap-3 mb-8">
           <div
             className="w-10 h-10 rounded-lg shadow-lg"
@@ -64,7 +65,7 @@ export function LoginPage() {
               background: 'linear-gradient(135deg, #22d3ee 0%, #a78bfa 100%)',
               boxShadow: '0 0 20px rgba(34, 211, 238, 0.3)'
             }}
-          ></div>
+          />
           <div className="flex items-center gap-1">
             <span style={{ color: '#e5e7eb', fontSize: '1.5rem' }}>Machine</span>
             <span style={{ color: '#22d3ee', fontSize: '1.5rem' }}>Analysis</span>
@@ -134,8 +135,6 @@ export function LoginPage() {
             {isLoading ? "Anmelden..." : "Anmelden"}
           </button>
         </form>
-
-      
       </div>
     </div>
   );

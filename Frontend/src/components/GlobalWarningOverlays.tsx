@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAppState } from "../context/AppStateContext";
 
+/** App-level modal overlays: critical alert pop-up + warning log management/export. */
 export function GlobalWarningOverlays() {
   const {
     isRedAlertOpen,
@@ -15,6 +16,7 @@ export function GlobalWarningOverlays() {
   const [selectedIndices, setSelectedIndices] = useState<Set<number>>(new Set());
 
   useEffect(() => {
+    // Reset selection when the log changes.
     setSelectedIndices(new Set());
   }, [warningLog.length]);
 
@@ -22,7 +24,11 @@ export function GlobalWarningOverlays() {
 
   const toggleSelectAll = () => {
     if (warningLog.length === 0) return;
-    setSelectedIndices((prev) => (prev.size === warningLog.length ? new Set() : new Set(warningLog.map((_, i) => i))));
+    setSelectedIndices((prev) =>
+      prev.size === warningLog.length
+        ? new Set()
+        : new Set(warningLog.map((_, i) => i))
+    );
   };
 
   const toggleSelectOne = (index: number) => {
@@ -42,13 +48,14 @@ export function GlobalWarningOverlays() {
     return warningLog.filter((_, idx) => selectedIndices.has(idx));
   }, [selectedIndices, warningLog]);
 
+  // Export (selected) log rows as CSV (BOM helps Excel with UTF-8).
   const exportCsv = () => {
     if (warningLog.length === 0) return;
     const rows = selectedRows;
     const header = ["time", "mode", "severity", "recommendation"];
     const escapeCsv = (value: string) => {
-      const escaped = value.replace(/\"/g, "\"\"");
-      return /[\",\n]/.test(escaped) ? `"${escaped}"` : escaped;
+      const escaped = value.replace(/"/g, '""');
+      return /[",\n]/.test(escaped) ? `"${escaped}"` : escaped;
     };
     const body = rows.map((row) =>
       [row.time, row.mode, row.severity, row.recommendation].map(escapeCsv).join(",")

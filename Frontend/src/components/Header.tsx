@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router-dom';
 import { LogOut, User } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
+/** Top bar on protected pages (shows current user + logout). */
 export function Header() {
   const navigate = useNavigate();
   const auth = useAuth();
@@ -23,7 +24,6 @@ export function Header() {
       }}
     >
       <div className="px-8 py-4 flex items-center justify-between">
-        {/* Logo and Brand */}
         <div className="flex items-center gap-3">
           <div
             className="w-7 h-7 rounded-lg shadow-lg"
@@ -38,7 +38,6 @@ export function Header() {
           </div>
         </div>
 
-        {/* User + Logout */}
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-2 px-4 py-2" style={{ color: '#9ca3af' }}>
             <User className="w-4 h-4" />

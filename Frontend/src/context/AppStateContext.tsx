@@ -1,6 +1,12 @@
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { api, ApiError } from "../api/client";
 
+/**
+ * Global UI state for protected pages:
+ * - Prediction config persisted in `localStorage`
+ * - Warning log persisted in `sessionStorage`
+ * - Polling `/predict/latest` to create warning entries + show critical alerts
+ */
 export type WarningLogEntry = {
   time: string;
   mode: string;
@@ -124,6 +130,7 @@ const mapRecommendation = (light: string): string => {
   return "Keine Aktion erforderlich";
 };
 
+/** Provider for prediction config + warning log state (used across the protected UI). */
 export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const [predictionConfig, setPredictionConfig] = useState<PredictionConfig>(readStoredConfig);
   const [predictionConfigMeta, setPredictionConfigMeta] = useState<PredictionConfigMeta>({
@@ -183,6 +190,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     setWarningLog((prev) => prev.filter((_, idx) => !toRemove.has(idx)));
   };
 
+  // Poll backend for the latest prediction record and derive warning entries for the UI.
   useEffect(() => {
     let alive = true;
     let inFlight = false;
@@ -240,7 +248,10 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     };
 
     void poll();
-    const pollMsRaw = typeof window !== "undefined" ? window.localStorage.getItem("pms.settings.pollMs") : null;
+    const pollMsRaw =
+      typeof window !== "undefined"
+        ? window.localStorage.getItem("pms.settings.pollMs")
+        : null;
     const pollMs = pollMsRaw ? Math.max(500, Number(pollMsRaw)) : 2000;
     const id = setInterval(poll, Number.isFinite(pollMs) ? pollMs : 2000);
 
@@ -289,6 +300,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   return <AppStateContext.Provider value={value}>{children}</AppStateContext.Provider>;
 }
 
+/** Access app-wide state (prediction config + warning log). */
 export function useAppState() {
   const ctx = useContext(AppStateContext);
   if (!ctx) throw new Error("useAppState must be used within AppStateProvider");

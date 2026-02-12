@@ -19,8 +19,8 @@ type TrendPoint = {
   temp: number | null;
 };
 
+/** Main dashboard: trend chart + KPIs + latest warning state. */
 export function DashboardPage() {
-  // --- Trend + KPI (wie Kommilitonin) ---
   const [trendData, setTrendData] = useState<TrendPoint[]>([]);
   const [avgTorque, setAvgTorque] = useState<number | null>(null);
   const [avgToolWear, setAvgToolWear] = useState<number | null>(null);
@@ -105,9 +105,7 @@ export function DashboardPage() {
   const formatTime = (ts: number) => new Date(ts).toLocaleTimeString();
   const formatDateTime = (ts: number) => new Date(ts).toLocaleString();
 
-  // ============================================================
-  // 1) Trend-Daten holen (api.getData) + Ø Torque / Ø Tool Wear
-  // ============================================================
+  // Load trend data from /getdata and compute simple KPI averages.
   useEffect(() => {
     let alive = true;
     let inFlight = false;
@@ -232,26 +230,13 @@ export function DashboardPage() {
     };
   }, []);
 
-  // ============================================================
-  // 2) Prediction Latest + Status holen (api.*)
-  //    - Wichtig: /predict/latest kann 204 liefern -> unser client gibt dann "undefined"
-  // ============================================================
+  // Poll prediction service for the latest record. Note: /predict/latest may return 204 (no content).
   useEffect(() => {
     let alive = true;
 
     const loadPrediction = async () => {
       try {
-        // status (running etc.)
-        try {
-          const status = await api.getPredictionStatus();
-          // nicht zwingend needed im Dashboard-KPI hier, aber useful für warnings later
-          // -> wir lassen es bewusst still
-          void status;
-        } catch {
-          // ignore
-        }
-
-        const latestRes = await api.getPredictionLatest(); // kann undefined sein bei 204
+        const latestRes = await api.getPredictionLatest();
         const latest = (latestRes as any)?.latest ?? null;
 
         if (!latest) {
@@ -321,7 +306,7 @@ export function DashboardPage() {
     };
   }, []);
 
-  // --- UI: Farben wie bei Kommilitonin ---
+  // UI colors derived from traffic light + failure probability.
   const failureProbPct = failureProb !== null ? failureProb * 100 : null;
 
   const probColor =
@@ -335,7 +320,6 @@ export function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      {/* Title Section */}
       <div className="p-6 rounded-[14px] shadow-lg" style={cardStyle}>
         <h1 className="mb-2" style={{ color: "#e5e7eb", fontSize: "1.5rem" }}>
           Systemübersicht: Maschinenzustand & Vorhersagen
@@ -345,7 +329,6 @@ export function DashboardPage() {
         </p>
       </div>
 
-      {/* KPI Cards */}
       <div className="grid grid-cols-4 gap-4">
         <div className="p-5 rounded-[14px] shadow-lg" style={cardStyle}>
           <div className="flex items-start justify-between mb-3">
@@ -388,7 +371,6 @@ export function DashboardPage() {
         </div>
       </div>
 
-      {/* Trend Chart */}
       <div className="p-6 rounded-[14px] shadow-lg" style={cardStyle}>
         <h2 className="mb-4" style={{ color: "#e5e7eb", fontSize: "1.125rem" }}>
           Prozessparameter-Trend
@@ -403,7 +385,6 @@ export function DashboardPage() {
         </p>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          {/* Torque */}
           <div className="p-4 rounded-[12px]" style={{ background: "#1f201d" }}>
             <h3 style={{ color: "#e5e7eb", fontSize: "0.95rem", marginBottom: 8 }}>Torque [Nm]</h3>
             <ResponsiveContainer width="100%" height={220}>
@@ -438,7 +419,6 @@ export function DashboardPage() {
             </ResponsiveContainer>
           </div>
 
-          {/* Rotational Speed */}
           <div className="p-4 rounded-[12px]" style={{ background: "#1f201d" }}>
             <h3 style={{ color: "#e5e7eb", fontSize: "0.95rem", marginBottom: 8 }}>
               Rotational Speed [rpm]
@@ -475,7 +455,6 @@ export function DashboardPage() {
             </ResponsiveContainer>
           </div>
 
-          {/* Process Temperature */}
           <div className="p-4 rounded-[12px]" style={{ background: "#1f201d" }}>
             <h3 style={{ color: "#e5e7eb", fontSize: "0.95rem", marginBottom: 8 }}>
               Process Temperature [K]
@@ -536,7 +515,6 @@ export function DashboardPage() {
         </div>
       </div>
 
-      {/* Warnings Panel */}
       <div className="p-6 rounded-[14px] shadow-lg" style={cardStyle}>
         <div className="mb-4 flex items-center justify-between">
           <h2 style={{ color: "#e5e7eb", fontSize: "1.125rem" }}>Log Warnungen</h2>
@@ -638,17 +616,3 @@ export function DashboardPage() {
     </div>
   );
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
