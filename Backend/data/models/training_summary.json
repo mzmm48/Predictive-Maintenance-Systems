@@ -1,0 +1,25 @@
+{
+  "rows_total": 12307,
+  "rows_train": 8614,
+  "rows_test": 3693,
+  "stage2_rows_train": 281,
+  "stage2_rows_test": 112,
+  "stage2_classes": [
+    "HDF",
+    "OSF",
+    "PWF",
+    "TWF"
+  ],
+  "stage2_models": [
+    "Logistic_Regression_FailureType",
+    "Logistic_Regression_CV_FailureType",
+    "SGD_FailureType",
+    "Random_Forest_FailureType",
+    "Gradient_Boosting_FailureType",
+    "AdaBoost_FailureType",
+    "Bagging_FailureType",
+    "Decision_Tree_FailureType",
+    "K-Nearest_Neighbors_FailureType"
+  ],
+  "stage2_gate_rule": "stage1_label == 1"
+}
