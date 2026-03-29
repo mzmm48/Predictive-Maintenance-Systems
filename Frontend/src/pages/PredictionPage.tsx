@@ -24,23 +24,18 @@ type LatestRecord = {
   UDI?: number | string;
   TS?: string;
   predicted_label?: number;
+  stage1_probability?: number | string | null;
   probability?: number | string;
   probability_failure?: number | string;
   probabilityFailure?: number | string;
   traffic_light?: string;
   failure_mode?: string;
+  stage2_executed?: boolean;
+  failure_type_pred?: string | null;
+  failure_type_prob?: number | string | null;
+  stage1_threshold?: number;
   product_id?: number | string;
   id?: number | string;
-};
-
-type DataRow = {
-  UDI?: number | string;
-  TWF?: number | boolean;
-  HDF?: number | boolean;
-  PWF?: number | boolean;
-  OSF?: number | boolean;
-  RNF?: number | boolean;
-  [key: string]: unknown;
 };
 
 /** Prediction UI: control simulation + prediction service, and run one-shot predictions. */
@@ -78,11 +73,6 @@ export function PredictionPage() {
 
   // Prediction results
   const [results, setResults] = useState<ResultRow[]>([]);
-  const [failureTypeLabel, setFailureTypeLabel] = useState<string | null>(null);
-  const failureTypeLabelRef = useRef<string | null>(null);
-  const lastFailureLookupUdiRef = useRef<number | null>(null);
-  const failureLookupInFlightRef = useRef(false);
-  const failureLookupPromiseRef = useRef<Promise<string | null> | null>(null);
 
   const cardStyle = useMemo(
     () => ({
@@ -92,14 +82,6 @@ export function PredictionPage() {
     []
   );
   const optionStyle = { color: "#111827", background: "#f3f4f6" };
-  const FAILURE_LOOKUP_LIMIT = 500;
-  const FAILURE_KEYS = ["TWF", "HDF", "PWF", "OSF", "RNF"] as const;
-
-  const setFailureTypeLabelValue = (value: string | null) => {
-    failureTypeLabelRef.current = value;
-    setFailureTypeLabel(value);
-  };
-
   useEffect(() => {
     predictionConfigMetaRef.current = predictionConfigMeta;
   }, [predictionConfigMeta]);
@@ -152,27 +134,8 @@ export function PredictionPage() {
     }
   };
 
-  const parseUdi = (value: unknown): number | null => {
-    if (typeof value === "number" && Number.isFinite(value)) return Math.trunc(value);
-    if (typeof value === "string") {
-      const trimmed = value.trim();
-      if (!trimmed) return null;
-      const parsed = Number(trimmed);
-      return Number.isFinite(parsed) ? Math.trunc(parsed) : null;
-    }
-    return null;
-  };
-
   const normalizeInterval = (value: number, fallback = 1): number =>
     Number.isFinite(value) && value > 0 ? value : fallback;
-
-  const isFailureFlag = (value: unknown): boolean =>
-    value === 1 || value === true || value === "1";
-
-  const getFailureTypeFromRow = (row: DataRow): string => {
-    const hits = FAILURE_KEYS.filter((k) => isFailureFlag(row[k]));
-    return hits.length > 0 ? hits.join(", ") : "-";
-  };
 
   const escapeCsv = (value: string | number | null | undefined) => {
     const raw = value == null ? "" : String(value);
@@ -231,58 +194,9 @@ export function PredictionPage() {
 
   const tlColor =
     tl === "red" ? "#ef4444" : tl === "yellow" ? "#f59e0b" : tl === "green" ? "#22c55e" : "#e5e7eb";
-  const failureTypeDisplay =
-    latest?.predicted_label === 1 ? failureTypeLabel ?? "-" : "-";
-
-  const lookupFailureTypeByUdi = async (udi: number): Promise<string | null> => {
-    const res = await api.getData(FAILURE_LOOKUP_LIMIT);
-    const rows = Array.isArray(res.data) ? (res.data as DataRow[]) : [];
-    const match = rows.find((row) => parseUdi(row.UDI) === udi);
-    return match ? getFailureTypeFromRow(match) : null;
-  };
-
-  const updateFailureTypeFromLatest = async (
-    record: LatestRecord | null,
-    opts?: { force?: boolean }
-  ): Promise<string | null> => {
-    if (!record?.UDI) {
-      setFailureTypeLabelValue(null);
-      return null;
-    }
-    const udi = parseUdi(record.UDI);
-    if (udi == null) {
-      setFailureTypeLabelValue(null);
-      return null;
-    }
-    if (!opts?.force && lastFailureLookupUdiRef.current === udi && failureTypeLabelRef.current !== null) {
-      return failureTypeLabelRef.current;
-    }
-    if (failureLookupInFlightRef.current) {
-      if (opts?.force && failureLookupPromiseRef.current) {
-        return failureLookupPromiseRef.current;
-      }
-      return failureTypeLabelRef.current;
-    }
-    failureLookupInFlightRef.current = true;
-    const lookupPromise = (async () => {
-      lastFailureLookupUdiRef.current = udi;
-      const label = await lookupFailureTypeByUdi(udi);
-      const normalized = label ?? "-";
-      setFailureTypeLabelValue(normalized);
-      return normalized;
-    })();
-    failureLookupPromiseRef.current = lookupPromise;
-    try {
-      return await lookupPromise;
-    } catch {
-      return failureTypeLabelRef.current;
-    } finally {
-      failureLookupInFlightRef.current = false;
-      if (failureLookupPromiseRef.current === lookupPromise) {
-        failureLookupPromiseRef.current = null;
-      }
-    }
-  };
+  const failureTypeDisplay = latest?.stage2_executed
+    ? latest?.failure_type_pred ?? "-"
+    : "Nicht vorhergesagt (kein Ausfall nach Stufe 1)";
 
   // ---------- API loaders ----------
   const loadStatus = async () => {
@@ -314,7 +228,6 @@ export function PredictionPage() {
     } catch (e: any) {
       if (e instanceof ApiError && (e.status === 404 || e.status === 204)) {
         setLatest(null);
-        setFailureTypeLabelValue(null);
         return null;
       }
       console.error(e);
@@ -337,8 +250,7 @@ export function PredictionPage() {
 
   useEffect(() => {
     const refreshLatest = async () => {
-      const latestRecord = await loadLatest();
-      void updateFailureTypeFromLatest(latestRecord);
+      await loadLatest();
     };
 
     void loadStatus();
@@ -358,7 +270,7 @@ export function PredictionPage() {
   const onStartPrediction = async () => {
     setBusy(true);
     try {
-      await api.startPrediction(interval, modelName, batchSize);
+      await api.startPrediction(interval, modelName, batchSize, 0.5);
       await loadStatus();
       // latest kommt eventuell erst später
     } catch (e: any) {
@@ -387,7 +299,7 @@ export function PredictionPage() {
     setShowResults(false);
 
     try {
-      await api.predictOnce(modelName, batchSize);
+      await api.predictOnce(modelName, batchSize, 0.5);
       const latestRecord = await loadLatest();
 
       if (!latestRecord) {
@@ -396,19 +308,17 @@ export function PredictionPage() {
         return;
       }
 
-      // Wenn latest da ist, bauen wir 1-2 Zeilen Ergebnis (ohne zu raten)
       const p = parseProbability(
-        latestRecord?.probability ??
+        latestRecord?.stage1_probability ??
+          latestRecord?.probability ??
           latestRecord?.probability_failure ??
           latestRecord?.probabilityFailure ??
           null
       );
 
       const light = String(latestRecord?.traffic_light ?? "").toLowerCase();
-      const failureType = await updateFailureTypeFromLatest(latestRecord, { force: true });
-      const failureTypeForDisplay =
-        latestRecord?.predicted_label === 1 ? failureType ?? "-" : "-";
       const mode =
+        latestRecord?.failure_type_pred ??
         latestRecord?.failure_mode ??
         (latestRecord?.predicted_label === 1 ? "Failure" : "Kein Ausfall");
 
@@ -428,7 +338,7 @@ export function PredictionPage() {
 
       const nextResults: ResultRow[] = [
         {
-          product: String(latestRecord?.product_id ?? latestRecord?.id ?? "Batch"),
+          product: String(latestRecord?.UDI ?? latestRecord?.product_id ?? latestRecord?.id ?? "Batch"),
           mode,
           probability: p === null ? "—" : `${(p * 100).toFixed(1)}%`,
           explanation,
@@ -979,9 +889,8 @@ export function PredictionPage() {
           </div>
 
           <div style={{ color: "#9ca3af", fontSize: "0.875rem", marginBottom: "0.75rem" }}>
-            Fehlerart (Label/DB):{" "}
+            Fehlerart (Modell Stufe 2):{" "}
             <span style={{ color: "#e5e7eb" }}>{failureTypeDisplay}</span>
-            <span style={{ color: "#6b7280" }}> (DB-Label, keine Modell-Erklaerung)</span>
           </div>
 
           <div className="rounded-lg overflow-auto" style={{ background: "#6b675c" }}>
@@ -1068,4 +977,3 @@ export function PredictionPage() {
     </div>
   );
 }
-

@@ -14,6 +14,7 @@ from sklearn.metrics import (
     precision_recall_fscore_support,
     roc_auc_score,
     roc_curve,
+    balanced_accuracy_score,
 )
 
 # Modell-Evaluation: lädt Testdaten + Modell und berechnet gängige Klassifikationsmetriken
@@ -84,6 +85,7 @@ def evaluate_model_metrics(model_name: str = "Random_Forest"):
 
     return {
         "model_name": model_name,
+        "task": "stage1_binary_failure",
         "metrics": {
             "accuracy": acc,
             "precision": precision,
@@ -98,4 +100,49 @@ def evaluate_model_metrics(model_name: str = "Random_Forest"):
         "classification_report": report_text,
         "roc_curve": {"points": roc_points},
         "feature_importances": feature_importances,
+    }
+
+
+def evaluate_failure_type_metrics(model_name: str = "Random_Forest_FailureType"):
+    x_test = joblib.load(DATA_DIR / "X_test_stage2.joblib")
+    y_test = joblib.load(DATA_DIR / "Y_test_stage2.joblib")
+    classes = joblib.load(DATA_DIR / "Y_stage2_classes.joblib")
+
+    model_path = MODELS_DIR / f"{model_name}.pkl"
+    with open(model_path, "rb") as f:
+        model_dict = pickle.load(f)
+
+    model = model_dict["model"]
+    y_pred = model.predict(x_test)
+
+    acc = accuracy_score(y_test, y_pred)
+    bal_acc = balanced_accuracy_score(y_test, y_pred)
+    precision_macro, recall_macro, f1_macro, _ = precision_recall_fscore_support(
+        y_test, y_pred, average="macro", zero_division=0
+    )
+    precision_weighted, recall_weighted, f1_weighted, _ = precision_recall_fscore_support(
+        y_test, y_pred, average="weighted", zero_division=0
+    )
+
+    cm = confusion_matrix(y_test, y_pred).tolist()
+    report_text = classification_report(y_test, y_pred, target_names=[str(c) for c in classes], zero_division=0)
+
+    return {
+        "model_name": model_name,
+        "task": "stage2_failure_type",
+        "metrics": {
+            "accuracy": acc,
+            "balanced_accuracy": bal_acc,
+            "precision_macro": precision_macro,
+            "recall_macro": recall_macro,
+            "f1_macro": f1_macro,
+            "precision_weighted": precision_weighted,
+            "recall_weighted": recall_weighted,
+            "f1_weighted": f1_weighted,
+        },
+        "confusion_matrix": {
+            "labels": [str(c) for c in classes],
+            "matrix": cm,
+        },
+        "classification_report": report_text,
     }

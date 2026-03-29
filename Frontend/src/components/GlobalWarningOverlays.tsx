@@ -52,13 +52,15 @@ export function GlobalWarningOverlays() {
   const exportCsv = () => {
     if (warningLog.length === 0) return;
     const rows = selectedRows;
-    const header = ["time", "mode", "severity", "recommendation"];
+    const header = ["time", "mode", "failure_probability", "severity", "recommendation"];
     const escapeCsv = (value: string) => {
       const escaped = value.replace(/"/g, '""');
       return /[",\n]/.test(escaped) ? `"${escaped}"` : escaped;
     };
     const body = rows.map((row) =>
-      [row.time, row.mode, row.severity, row.recommendation].map(escapeCsv).join(",")
+      [row.time, row.mode, row.failureProbability, row.severity, row.recommendation]
+        .map(escapeCsv)
+        .join(",")
     );
     const csv = [`\uFEFF${header.join(",")}`, ...body].join("\n");
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
@@ -123,6 +125,9 @@ export function GlobalWarningOverlays() {
             </div>
             <div style={{ color: "#9ca3af", fontSize: "0.8rem" }}>
               {redAlertData.time} - {redAlertData.severity}
+            </div>
+            <div style={{ color: "#e5e7eb", fontSize: "0.85rem", marginTop: 6 }}>
+              Ausfallwahrscheinlichkeit: {redAlertData.failureProbability}
             </div>
             <div style={{ color: "#f59e0b", fontSize: "0.85rem", marginTop: 10 }}>
               {redAlertData.recommendation}
@@ -226,6 +231,9 @@ export function GlobalWarningOverlays() {
                       Severity
                     </th>
                     <th className="px-4 py-3 text-left" style={{ color: "#9ca3af", fontSize: "0.75rem" }}>
+                      Probability
+                    </th>
+                    <th className="px-4 py-3 text-left" style={{ color: "#9ca3af", fontSize: "0.75rem" }}>
                       Empfehlung
                     </th>
                   </tr>
@@ -233,7 +241,7 @@ export function GlobalWarningOverlays() {
                 <tbody>
                   {warningLog.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="px-4 py-4 text-center text-sm text-gray-400">
+                      <td colSpan={6} className="px-4 py-4 text-center text-sm text-gray-400">
                         Keine Warnungen im Log
                       </td>
                     </tr>
@@ -283,6 +291,9 @@ export function GlobalWarningOverlays() {
                         </td>
                         <td className="px-4 py-3" style={{ color: "#e5e7eb", fontSize: "0.875rem" }}>
                           {w.severity}
+                        </td>
+                        <td className="px-4 py-3" style={{ color: "#e5e7eb", fontSize: "0.875rem" }}>
+                          {w.failureProbability}
                         </td>
                         <td className="px-4 py-3" style={{ color: "#9ca3af", fontSize: "0.875rem" }}>
                           {w.recommendation}

@@ -1,3 +1,5 @@
+/// <reference types="vite/client" />
+
 const DEFAULT_API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
 const API_BASE_STORAGE_KEY = "pms.settings.apiBase";
@@ -123,6 +125,7 @@ export interface PredictLatestResponse {
   model_name?: string;
   interval?: number;
   batch_size?: number;
+  stage1_threshold?: number;
   latest?: any;
   summary?: any;
 }
@@ -132,6 +135,7 @@ export interface PredictStatusResponse {
   model_name?: string;
   interval?: number;
   batch_size?: number;
+  stage1_threshold?: number;
   last_result?: any;
 }
 
@@ -170,11 +174,17 @@ export const api = {
   },
 
   // Prediction service control
-  startPrediction(interval = 1.0, modelName = "Random_Forest", batchSize = 50) {
+  startPrediction(
+    interval = 1.0,
+    modelName = "Random_Forest",
+    batchSize = 50,
+    stage1Threshold = 0.5
+  ) {
     const params = new URLSearchParams({
       interval: String(interval),
       model_name: modelName,
       batch_size: String(batchSize),
+      stage1_threshold: String(stage1Threshold),
     });
     return request<any>(`/predict/start?${params.toString()}`, { method: "POST" });
   },
@@ -191,10 +201,15 @@ export const api = {
     return request<PredictLatestResponse>(`/predict/latest`);
   },
 
-  predictOnce(modelName = "Random_Forest", batchSize = 50) {
+  predictOnce(
+    modelName = "Random_Forest",
+    batchSize = 50,
+    stage1Threshold = 0.5
+  ) {
     const params = new URLSearchParams({
       model_name: modelName,
       batch_size: String(batchSize),
+      stage1_threshold: String(stage1Threshold),
     });
     return request<any>(`/predict/once?${params.toString()}`, { method: "POST" });
   },
@@ -221,6 +236,11 @@ export const api = {
   evaluateModel(modelName = "Random_Forest") {
     const params = new URLSearchParams({ model_name: modelName });
     return request<EvaluateModelResponse>(`/evaluate_model?${params.toString()}`);
+  },
+
+  evaluateFailureType(modelName = "Random_Forest_FailureType") {
+    const params = new URLSearchParams({ model_name: modelName });
+    return request<any>(`/evaluate_failure_type?${params.toString()}`);
   },
 
   // Auth (HttpOnly Cookie JWT)

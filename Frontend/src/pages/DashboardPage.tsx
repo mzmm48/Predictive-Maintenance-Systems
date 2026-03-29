@@ -35,6 +35,7 @@ export function DashboardPage() {
   const [failureProb, setFailureProb] = useState<number | null>(null); // 0..1
   const [predLoading, setPredLoading] = useState<boolean>(true);
   const [trafficLight, setTrafficLight] = useState<"green" | "yellow" | "red" | null>(null);
+  const [failureType, setFailureType] = useState<string | null>(null);
 
   const { warningsView, warningsLoading, openLog } = useAppState();
   const lastTrendKeyRef = useRef<string>("");
@@ -245,6 +246,7 @@ export function DashboardPage() {
             setTrafficLight(null);
             setFailureProb(null);
             setActiveWarnings(0);
+            setFailureType(null);
           }
           return;
         }
@@ -265,6 +267,10 @@ export function DashboardPage() {
           null;
 
         const p = parseProbability(rawProb);
+        const fType =
+          latest?.stage2_executed === true
+            ? (latest?.failure_type_pred ?? null)
+            : null;
 
         // --- Summary warnings (wenn vorhanden) ---
         const yellow = Number((latestRes as any)?.summary?.yellow ?? 0);
@@ -281,6 +287,7 @@ export function DashboardPage() {
         setTrafficLight(tl);
         setFailureProb(p);
         setActiveWarnings(Number.isFinite(warningsCount) ? warningsCount : 0);
+        setFailureType(fType);
       } catch (e: any) {
         // Wenn 204/404 kommt, soll UI trotzdem stabil bleiben
         if (e instanceof ApiError && (e.status === 204 || e.status === 404)) {
@@ -289,6 +296,7 @@ export function DashboardPage() {
             setTrafficLight(null);
             setFailureProb(null);
             setActiveWarnings(0);
+            setFailureType(null);
           }
           return;
         }
@@ -340,6 +348,7 @@ export function DashboardPage() {
           </p>
           <p style={{ color: "#9ca3af", fontSize: "0.75rem", marginTop: "0.5rem" }}>
             Ausfallwahrscheinlichkeit (aktuelle Charge)
+            {failureType ? ` • Typ: ${failureType}` : ""}
           </p>
         </div>
 
@@ -544,6 +553,9 @@ export function DashboardPage() {
                   Severity
                 </th>
                 <th className="px-4 py-3 text-left" style={{ color: "#9ca3af", fontSize: "0.75rem" }}>
+                  Probability
+                </th>
+                <th className="px-4 py-3 text-left" style={{ color: "#9ca3af", fontSize: "0.75rem" }}>
                   Empfehlung
                 </th>
               </tr>
@@ -552,7 +564,7 @@ export function DashboardPage() {
             <tbody>
               {warningsLoading && (
                 <tr>
-                  <td colSpan={4} className="px-4 py-4 text-center text-sm text-gray-400">
+                  <td colSpan={5} className="px-4 py-4 text-center text-sm text-gray-400">
                     Lade Warnungen...
                   </td>
                 </tr>
@@ -560,7 +572,7 @@ export function DashboardPage() {
 
               {!warningsLoading && warningsView.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="px-4 py-4 text-center text-sm text-gray-400">
+                  <td colSpan={5} className="px-4 py-4 text-center text-sm text-gray-400">
                     Keine aktiven Warnungen
                   </td>
                 </tr>
@@ -598,6 +610,10 @@ export function DashboardPage() {
 
                   <td className="px-4 py-3" style={{ color: "#e5e7eb", fontSize: "0.875rem" }}>
                     {w.severity}
+                  </td>
+
+                  <td className="px-4 py-3" style={{ color: "#e5e7eb", fontSize: "0.875rem" }}>
+                    {w.failureProbability}
                   </td>
 
                   <td className="px-4 py-3" style={{ color: "#9ca3af", fontSize: "0.875rem" }}>

@@ -10,6 +10,7 @@ import { api, ApiError } from "../api/client";
 export type WarningLogEntry = {
   time: string;
   mode: string;
+  failureProbability: string;
   severity: "Hoch" | "Mittel" | "Niedrig";
   recommendation: string;
 };
@@ -64,6 +65,7 @@ const isValidWarning = (value: unknown): value is WarningLogEntry => {
   return (
     typeof candidate.time === "string" &&
     typeof candidate.mode === "string" &&
+    typeof candidate.failureProbability === "string" &&
     typeof candidate.recommendation === "string" &&
     (severity === "Hoch" || severity === "Mittel" || severity === "Niedrig")
   );
@@ -128,6 +130,22 @@ const mapRecommendation = (light: string): string => {
   if (light === "red") return "Sofort pruefen / Wartung einleiten";
   if (light === "yellow") return "Beobachten und zeitnah pruefen";
   return "Keine Aktion erforderlich";
+};
+
+const parseProbability = (raw: unknown): number | null => {
+  if (raw == null) return null;
+  if (typeof raw === "number" && Number.isFinite(raw)) {
+    const normalized = raw > 1 ? raw / 100 : raw;
+    return Math.max(0, Math.min(1, normalized));
+  }
+  if (typeof raw === "string") {
+    const cleaned = raw.trim().replace("%", "");
+    const n = parseFloat(cleaned);
+    if (!Number.isFinite(n)) return null;
+    const normalized = n > 1 ? n / 100 : n;
+    return Math.max(0, Math.min(1, normalized));
+  }
+  return null;
 };
 
 /** Provider for prediction config + warning log state (used across the protected UI). */
@@ -214,13 +232,25 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         const warningKey =
           String(latest?.UDI ?? latest?.id ?? latest?.product_id ?? "") +
           `|${tsRaw ?? ""}|${tl}|${latest?.predicted_label ?? ""}`;
+        const rawProb =
+          latest?.stage1_probability ??
+          latest?.probability ??
+          latest?.probability_failure ??
+          latest?.probabilityFailure ??
+          null;
+        const prob = parseProbability(rawProb);
+        const probText = prob == null ? "—" : `${(prob * 100).toFixed(1)}%`;
 
         if (warningKey === lastWarningKeyRef.current) return;
         lastWarningKeyRef.current = warningKey;
 
         const entry: WarningLogEntry = {
           time,
-          mode: latest?.failure_mode ?? (latest?.predicted_label === 1 ? "Failure" : "Warning"),
+          mode:
+            latest?.failure_type_pred ??
+            latest?.failure_mode ??
+            (latest?.predicted_label === 1 ? "Failure" : "Warning"),
+          failureProbability: probText,
           severity: mapSeverity(tl),
           recommendation: mapRecommendation(tl),
         };
@@ -231,7 +261,8 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
           lastRedWarningKeyRef.current = warningKey;
           setRedAlertData({
             time,
-            mode: latest?.failure_mode ?? "Failure",
+            mode: latest?.failure_type_pred ?? latest?.failure_mode ?? "Failure",
+            failureProbability: probText,
             severity: "Hoch",
             recommendation: mapRecommendation("red"),
           });
