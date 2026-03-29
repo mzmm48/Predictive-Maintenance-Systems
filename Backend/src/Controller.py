@@ -18,7 +18,7 @@ from typing import List, Optional
 
 from Backend.src.predict_worker import predict_once                 # One-shot Pipeline Step (DB -> preprocess -> predict)
 from Backend.src.predict_service import PredictionService           # Hintergrundservice: ruft predict_once im Intervall auf
-from Backend.src.evaluation_service import evaluate_model_metrics   # Debug Evaluation-Endpunkt (z. B. Accuracy, Recall, etc.)
+from Backend.src.evaluation_service import evaluate_model_metrics, evaluate_failure_type_metrics   # Debug Evaluation-Endpunkt (z. B. Accuracy, Recall, etc.)
 from Backend.src.predict import do_prediction                       # Model-Inferenz (inkl. predict_proba fallback)
 from Backend.src.db_con2 import get_ai4i_data                       # DB-Zugriff (Frontend-Daten + Auth-Query)
 from Backend.src.simulate_service import SimulationService          # Simulation: schreibt neue Datensätze in DB
@@ -386,7 +386,12 @@ def get_data(limit: int = 10, columns: Optional[List[ColumnName]] = Query(None),
 
 # Prediction (One-shot): führt einen einzelnen Pipeline-Durchlauf
 @app.post("/predict/once")
-def api_predict_once(model_name: str = "Random_Forest", batch_size: int = 50, user=Depends(require_user)):
+def api_predict_once(
+    model_name: str = "Random_Forest",
+    batch_size: int = 50,
+    stage1_threshold: float = 0.5,
+    user=Depends(require_user),
+):
     try:
         # 1) Input validieren
         if batch_size <= 0:
@@ -396,7 +401,11 @@ def api_predict_once(model_name: str = "Random_Forest", batch_size: int = 50, us
 
         # 2) Predict Step ausführen
         try:
-            result = predict_once(model_name=model_name, batch_size=batch_size)
+            result = predict_once(
+                model_name=model_name,
+                batch_size=batch_size,
+                stage1_threshold=stage1_threshold,
+            )
         except FileNotFoundError:
             raise HTTPException(status_code=404, detail=f"Modell '{model_name}' nicht gefunden.")
         except ValueError as e:
@@ -405,11 +414,12 @@ def api_predict_once(model_name: str = "Random_Forest", batch_size: int = 50, us
             # typischerweise DB/SQL/Preprocess Fehler
             raise HTTPException(status_code=503, detail=f"Prediction-Step fehlgeschlagen (DB/Pipeline): {e}")
        
-        # ✅ WICHTIG: auch bei /predict/once muss latest funktionieren
+        # WICHTIG: auch bei /predict/once muss latest funktionieren
         # /predict/latest liest aus dem PredictionService, also spiegeln wir das Ergebnis dort rein
         service._last_result = result
         service._model_name = model_name
         service._batch_size = batch_size
+        service._stage1_threshold = stage1_threshold
 
         return result
 
@@ -420,7 +430,13 @@ def api_predict_once(model_name: str = "Random_Forest", batch_size: int = 50, us
 
 # Prediction-Service starten: startet Hintergrundservice, der predict_once in Intervallen ausführt
 @app.post("/predict/start")
-def api_predict_start(interval: float = 1.0, model_name: str = "Random_Forest", batch_size: int = 50, user=Depends(require_user)):
+def api_predict_start(
+    interval: float = 1.0,
+    model_name: str = "Random_Forest",
+    batch_size: int = 50,
+    stage1_threshold: float = 0.5,
+    user=Depends(require_user),
+):
     try:
         # 1) Input validieren
         if interval <= 0:
@@ -430,7 +446,12 @@ def api_predict_start(interval: float = 1.0, model_name: str = "Random_Forest", 
 
         # 2) Service starten
         try:
-            started = service.start(interval=interval, model_name=model_name, batch_size=batch_size)
+            started = service.start(
+                interval=interval,
+                model_name=model_name,
+                batch_size=batch_size,
+                stage1_threshold=stage1_threshold,
+            )
         except FileNotFoundError:
             raise HTTPException(status_code=404, detail=f"Modell '{model_name}' nicht gefunden.")
         except Exception as e:
@@ -632,6 +653,7 @@ def system_start_demo(
     predict_interval: float = 1.0,
     batch_size: int = 50,
     model_name: str = "Random_Forest",
+    stage1_threshold: float = 0.5,
     mode: str = "simulation",
     delete_sim_data: bool = True,
     user=Depends(require_user),
@@ -668,6 +690,7 @@ def system_start_demo(
                 interval=predict_interval,
                 model_name=model_name,
                 batch_size=batch_size,
+                stage1_threshold=stage1_threshold,
             )
         except FileNotFoundError:
             raise HTTPException(status_code=404, detail=f"Modell '{model_name}' nicht gefunden.")
@@ -690,6 +713,7 @@ def system_start_demo(
                 "interval": predict_interval,
                 "batch_size": batch_size,
                 "model_name": model_name,
+                "stage1_threshold": stage1_threshold,
                 "status": service.status(),
             },
         }
@@ -739,6 +763,27 @@ def evaluate_model(model_name: ModelName = ModelName.random_forest, user=Depends
             raise HTTPException(status_code=400, detail=str(e))
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Evaluation fehlgeschlagen: {e}")
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/evaluate_failure_type")
+def evaluate_failure_type(model_name: str = "Random_Forest_FailureType", user=Depends(require_user)):
+    try:
+        try:
+            result = evaluate_failure_type_metrics(model_name)
+            if result is None:
+                raise HTTPException(status_code=500, detail="evaluate_failure_type_metrics hat None zurückgegeben.")
+            return result
+        except FileNotFoundError:
+            raise HTTPException(status_code=404, detail=f"Modell '{model_name}' nicht gefunden.")
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failure-Type-Evaluation fehlgeschlagen: {e}")
 
     except HTTPException:
         raise

@@ -14,6 +14,7 @@ class PredictionService:
         self._interval: float = 1.0
         self._model_name: str = "Random_Forest"
         self._batch_size: int = 50
+        self._stage1_threshold: float = 0.5
 
         self._last_result: Optional[Dict[str, Any]] = None
         self._running: bool = False
@@ -25,14 +26,21 @@ class PredictionService:
             while not self._stop_event.is_set():
                 self._last_result = predict_once(
                     model_name=self._model_name,
-                    batch_size=self._batch_size
+                    batch_size=self._batch_size,
+                    stage1_threshold=self._stage1_threshold,
                 )
                 time.sleep(self._interval)
         finally:
             self._running = False
 
     # Service starten: initialisiert Parameter, startet Background-Thread und verhindert Doppelstart (liefert False wenn schon aktiv)
-    def start(self, interval: float = 1.0, model_name: str = "Random_Forest", batch_size: int = 50) -> bool:
+    def start(
+        self,
+        interval: float = 1.0,
+        model_name: str = "Random_Forest",
+        batch_size: int = 50,
+        stage1_threshold: float = 0.5,
+    ) -> bool:
         # läuft schon?
         if self._thread is not None and self._thread.is_alive():
             return False
@@ -40,6 +48,7 @@ class PredictionService:
         self._interval = interval
         self._model_name = model_name
         self._batch_size = batch_size
+        self._stage1_threshold = stage1_threshold
 
         self._stop_event.clear()
         self._thread = threading.Thread(target=self._run, daemon=True)
@@ -58,5 +67,6 @@ class PredictionService:
             "interval": self._interval,
             "model_name": self._model_name,
             "batch_size": self._batch_size,
+            "stage1_threshold": self._stage1_threshold,
             "last_result": self._last_result,
         }
