@@ -93,8 +93,6 @@ def predict_once(
         "green": sum(r["traffic_light"] == "green" for r in records),
         "yellow": sum(r["traffic_light"] == "yellow" for r in records),
         "red": sum(r["traffic_light"] == "red" for r in records),
-        "stage2_executed": sum(bool(r["stage2_executed"]) for r in records),
-        "failure_type_counts": _count_failure_types(records),
     }
     return {
         "processed": len(records),
@@ -103,17 +101,6 @@ def predict_once(
         "records": records,
         "summary": summary
     }
-
-
-def _count_failure_types(records: list[dict]) -> dict:
-    counts: dict[str, int] = {}
-    for r in records:
-        label = r.get("failure_type_pred")
-        if not label:
-            continue
-        key = str(label)
-        counts[key] = counts.get(key, 0) + 1
-    return counts
 
 #Ampelsystem für Wahrscheinlichkeiten anhand von Schwellwerten
 def traffic_light(prob: float, yellow: float = 0.10, red: float = 0.75) -> str:

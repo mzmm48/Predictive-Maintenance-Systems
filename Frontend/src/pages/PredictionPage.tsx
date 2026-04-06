@@ -270,7 +270,8 @@ export function PredictionPage() {
   const onStartPrediction = async () => {
     setBusy(true);
     try {
-      await api.startPrediction(interval, modelName, batchSize, 0.5);
+      const stage1Threshold = getUiThreshold();
+      await api.startPrediction(interval, modelName, batchSize, stage1Threshold);
       await loadStatus();
       // latest kommt eventuell erst später
     } catch (e: any) {
@@ -299,7 +300,8 @@ export function PredictionPage() {
     setShowResults(false);
 
     try {
-      await api.predictOnce(modelName, batchSize, 0.5);
+      const stage1Threshold = getUiThreshold();
+      await api.predictOnce(modelName, batchSize, stage1Threshold);
       const latestRecord = await loadLatest();
 
       if (!latestRecord) {
