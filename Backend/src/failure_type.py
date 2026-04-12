@@ -3,7 +3,8 @@ from __future__ import annotations
 import pandas as pd
 
 FAILURE_TYPE_COLS = ["TWF", "HDF", "PWF", "OSF", "RNF"]
-VALID_SINGLE_LABEL_TYPES = ["TWF", "HDF", "PWF", "OSF", "RNF"]
+# Stage-2 training classes: RNF is intentionally excluded.
+VALID_SINGLE_LABEL_TYPES = ["TWF", "HDF", "PWF", "OSF"]
 
 
 def build_failure_type_series(df: pd.DataFrame) -> pd.Series:
@@ -46,6 +47,7 @@ def attach_failure_type(df: pd.DataFrame) -> pd.DataFrame:
 def filter_stage2_training_rows(df_with_failure_type: pd.DataFrame) -> pd.DataFrame:
     """
     Stage-2 training rows: only true machine failures with a single, valid label.
+    Valid labels are restricted by VALID_SINGLE_LABEL_TYPES (RNF excluded).
     """
     if "failure_type" not in df_with_failure_type.columns:
         raise ValueError("Column 'failure_type' missing.")

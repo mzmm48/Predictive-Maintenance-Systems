@@ -1,9 +1,9 @@
 {
-  "rows_total": 12307,
-  "rows_train": 8614,
-  "rows_test": 3693,
-  "stage2_rows_train": 281,
-  "stage2_rows_test": 112,
+  "rows_total": 93596,
+  "rows_train": 65517,
+  "rows_test": 28079,
+  "stage2_rows_train": 2085,
+  "stage2_rows_test": 893,
   "stage2_classes": [
     "HDF",
     "OSF",
