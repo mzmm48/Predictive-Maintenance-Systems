@@ -198,8 +198,8 @@ export function ModelInsightsPage() {
     };
   }, [selectedModel]);
 
-  const fmtPct = (v: number | null) =>
-    typeof v === "number" ? `${Math.round(v * 100)}%` : "â€”";
+  const fmtPct = (v: number | null, decimals: number = 0) =>
+    typeof v === "number" ? `${(v * 100).toFixed(decimals)}%` : "â€”";
 
   const fmtAuc = (v: number | null) =>
     typeof v === "number" ? v.toFixed(2) : "_";
@@ -357,10 +357,10 @@ export function ModelInsightsPage() {
               { label: "Recall", value: loading ? "Loading..." : fmtPct(metricsStage1.recall), sub: "Class: Failure" },
             ]
           : [
-              { label: "Accuracy", value: loading ? "Loading..." : fmtPct(metricsStage2.accuracy), sub: "Stage 2" },
-              { label: "Balanced Acc.", value: loading ? "Loading..." : fmtPct(metricsStage2.balanced_accuracy), sub: "Klassenbalanciert" },
-              { label: "F1 Macro", value: loading ? "Loading..." : fmtPct(metricsStage2.f1_macro), sub: "Alle Klassen gleich" },
-              { label: "F1 Weighted", value: loading ? "Loading..." : fmtPct(metricsStage2.f1_weighted), sub: "Gewichtet" },
+              { label: "Balanced Acc.", value: loading ? "Loading..." : fmtPct(metricsStage2.balanced_accuracy), sub: "Alle Klassen gleich gewichtet" },
+              { label: "F1 Weighted", value: loading ? "Loading..." : fmtPct(metricsStage2.f1_weighted), sub: "Gesamtwert nach Klassenhäufigkeit" },
+              { label: "Precision", value: loading ? "Loading..." : fmtPct(metricsStage2.precision_weighted), sub: "Trefferquote (gewichtet)" },
+              { label: "Recall", value: loading ? "Loading..." : fmtPct(metricsStage2.recall_weighted), sub: "Erkennungsrate (gewichtet)" },
             ]).map((k) => (
           <div
             key={k.label}

@@ -68,9 +68,9 @@ def predict_failure_type(
         labels = model.predict(x_aligned)
         return labels, np.asarray([None] * len(labels), dtype=object)
 
-    prob = model.predict_proba(x_aligned) #leifert für jede Zeile eine Liste von Wahrscheinlichkeiten über alle Fehlerklassen (z. B. HDF/OSF/PWF/TWF)
-    pred_idx = np.argmax(prob, axis=1)
-    pred_prob = prob[np.arange(len(pred_idx)), pred_idx]
+    prob = model.predict_proba(x_aligned) # liefert für jede Zeile eine Liste von Wahrscheinlichkeiten über alle Fehlerklassen (z. B. HDF/OSF/PWF/TWF)
+    pred_idx = np.argmax(prob, axis=1) # Auswahl der Klasse mit der höchsten Wahrscheinlichkeit für jede Zeile
+    pred_prob = prob[np.arange(len(pred_idx)), pred_idx] # zugehörige Wahrscheinlichkeit der vorhergesagten Klasse
 
     if classes is None:
         if hasattr(model, "classes_"):

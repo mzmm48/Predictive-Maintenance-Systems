@@ -62,7 +62,7 @@ def train_all_models() -> dict:
 
     # 1) Load + enrich labels
     # Rohdaten aus DB lesen und aus TWF/HDF/PWF/OSF/RNF eine single-label failure_type erzeugen.
-    df_raw = get_training_data()
+    df_raw = get_training_data(limit=12_000)
     df_raw = attach_failure_type(df_raw)
 
     # 2) Global split (single split for stage 1 and stage 2)
